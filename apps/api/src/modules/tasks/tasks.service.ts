@@ -13,6 +13,7 @@ import { OutboundEventsService } from '../outbound-events/outbound-events.servic
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import { CW_TASK_TYPES } from './cw-task-types';
 import { attachJobSummaries } from '../../common/attach-job-summaries';
+import type { TaskAction } from './task-action.types';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -192,15 +193,23 @@ export class TasksService {
 
   /** Infer synced state for tasks created before sync_status was tracked. */
   private shapeTask<T extends TaskViewRow | TaskInsert>(task: T): T {
-    if (task.syncStatus) return task;
     const payload = (task.taskPayload ?? {}) as Record<string, unknown>;
+    const rawAction = payload.action as TaskAction | undefined;
+    const action = rawAction?.actionKey ? rawAction : undefined;
+
+    if (task.syncStatus) {
+      return action ? { ...task, action } : task;
+    }
     const payloadId = typeof payload.id === 'string' ? payload.id.trim() : '';
     const externalRef = (task.externalReference ?? '').trim() || payloadId;
-    if (!externalRef) return task;
+    if (!externalRef) {
+      return action ? { ...task, action } : task;
+    }
     return {
       ...task,
       syncStatus: 'synced',
       externalReference: task.externalReference ?? externalRef,
+      ...(action ? { action } : {}),
     };
   }
 
@@ -360,7 +369,9 @@ export class TasksService {
       status,
       assignedToUserId,
       createdByUserId: params.userId ?? null,
-      taskPayload: {},
+      taskPayload: params.body.action
+        ? { action: params.body.action }
+        : {},
       syncStatus: hasConnection ? 'pending' : null,
       ...localFields,
     };
@@ -471,6 +482,14 @@ export class TasksService {
     }
     if (params.body.claimId !== undefined) {
       localPatch.claimId = parseOptionalText(params.body.claimId);
+    }
+
+    if (params.body.action !== undefined) {
+      const existingPayload = ((existing as Record<string, unknown>).taskPayload ?? {}) as Record<string, unknown>;
+      localPatch.taskPayload = {
+        ...existingPayload,
+        action: params.body.action,
+      };
     }
 
     this.logger.debug(

@@ -54,6 +54,10 @@ import {
   InvoicePublishWizard,
   type InvoicePublishMode,
 } from '@/components/invoices/InvoicePublishWizard';
+import {
+  InvoiceRecipientDrawer,
+  formatInvoiceRecipientLabel,
+} from '@/components/invoices/InvoiceRecipientDrawer';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { useJobCaps } from '@/hooks/useJobCaps';
 import {
@@ -158,8 +162,17 @@ export function InvoicePageHeader({
 
 // ---------- tabs ------------------------------------------------------------
 
-function OverviewTab({ invoice }: { invoice: Invoice }) {
+function OverviewTab({
+  invoice,
+  canEditRecipient,
+  onEditRecipient,
+}: {
+  invoice: Invoice;
+  canEditRecipient: boolean;
+  onEditRecipient: () => void;
+}) {
   const status = invoiceStatusName(invoice);
+  const recipientLabel = formatInvoiceRecipientLabel(invoice);
 
   return (
     <SectionCard
@@ -169,6 +182,26 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
       <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
       <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
       <DefRow label="Status" value={<StatusBadge status={status} />} />
+      <DefRow
+        label="Recipient"
+        value={
+          canEditRecipient ? (
+            <button
+              type="button"
+              onClick={onEditRecipient}
+              className="group inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              title="Change recipient"
+            >
+              <span className="wrap-break-word underline decoration-slate-300 underline-offset-2 group-hover:decoration-blue-400">
+                {recipientLabel}
+              </span>
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-blue-600" />
+            </button>
+          ) : (
+            recipientLabel
+          )
+        }
+      />
       <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
       <DefRow label="Amount received" value={formatCurrency(invoice.amountReceived ?? 0)} />
       <DefRow label="Remaining" value={formatCurrency(invoiceRemainingAmount(invoice))} />
@@ -223,6 +256,7 @@ export function InvoiceDetail({
   const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [recipientDrawerOpen, setRecipientDrawerOpen] = useState(false);
   const [approving, setApproving] = useState(false);
   const [editConfirmOpen, setEditConfirmOpen] = useState(false);
   const [returningToDraft, setReturningToDraft] = useState(false);
@@ -255,6 +289,8 @@ export function InvoiceDetail({
   const approveEnabled = showApprove && hasPositiveAmount && !approving;
   const showEditInvoice = isLocalInvoice && isReviewed;
   const canPublish = isLocalInvoice && isReviewed;
+  const canEditRecipient =
+    isLocalInvoice && (isDraft || isReviewed);
   const remainingAmount = invoiceRemainingAmount(invoice);
   const receivedAmount = invoiceAmountReceived(invoice);
   const showReceivedPayment =
@@ -263,8 +299,13 @@ export function InvoiceDetail({
       invoiceIsPartiallyPaid(invoice) ||
       Boolean(invoice.sourceExternalReference));
   const canEditLineItems = isLocalInvoice;
+  const recipientType = invoice.recipientType ?? null;
   const publishMode: InvoicePublishMode =
-    caps.publishMode === 'external' ? 'external' : 'internal';
+    recipientType === 'insured' || recipientType === 'other'
+      ? 'email'
+      : recipientType === 'insurer' || caps.publishMode === 'external'
+        ? 'external'
+        : 'internal';
   const canUndo = canEditLineItems && (lineItemsDirty || undoStack.length > 0);
 
   useEffect(() => {
@@ -502,6 +543,13 @@ export function InvoiceDetail({
           )}
           {canPublish && (
             <PublishButton
+              title={
+                publishMode === 'email'
+                  ? 'Email invoice'
+                  : publishMode === 'external'
+                    ? 'Submit to Insurer'
+                    : 'Publish'
+              }
               onClick={() => {
                 if (!requirePublish()) return;
                 setPublishWizardOpen(true);
@@ -651,6 +699,12 @@ export function InvoiceDetail({
         purchaseOrder={purchaseOrder}
         mode={publishMode}
       />
+      <InvoiceRecipientDrawer
+        open={recipientDrawerOpen}
+        onOpenChange={setRecipientDrawerOpen}
+        invoice={invoice}
+        job={job}
+      />
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -678,7 +732,16 @@ export function InvoiceDetail({
             {saveError}
           </div>
         )}
-        {tab === 'overview' && <OverviewTab invoice={invoice} />}
+        {tab === 'overview' && (
+          <OverviewTab
+            invoice={invoice}
+            canEditRecipient={canEditRecipient}
+            onEditRecipient={() => {
+              if (!requireUpdateInvoice()) return;
+              setRecipientDrawerOpen(true);
+            }}
+          />
+        )}
         {lineItemsMounted && (
           <div className={tab === 'line-items' ? undefined : 'hidden'}>
             <InvoiceLineItemsTab

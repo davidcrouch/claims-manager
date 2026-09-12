@@ -412,6 +412,14 @@ export interface Invoice {
   invoicePayload?: Record<string, unknown> | null;
   apiPayload?: Record<string, unknown> | null;
   syncStatus?: 'pending' | 'synced' | 'failed' | null;
+  /** Who receives the invoice: insurer | insured | other */
+  recipientType?: 'insurer' | 'insured' | 'other' | null;
+  recipientContactId?: string | null;
+  recipientContact?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
@@ -581,6 +589,17 @@ export interface Report {
   job?: ListJobSummary | null;
 }
 
+export interface TaskAction {
+  actionKey: string;
+  label: string;
+  context: {
+    entityType?: string;
+    entityId?: string;
+    jobId?: string;
+    claimId?: string;
+  };
+}
+
 export interface Task {
   id: string;
   tenantId: string;
@@ -609,6 +628,7 @@ export interface Task {
   createdAt?: string;
   updatedAt?: string;
   job?: ListJobSummary | null;
+  action?: TaskAction | null;
 }
 
 export interface Message {
@@ -914,6 +934,7 @@ export interface DashboardInboxItem {
   dueAt?: string | null;
   href: string;
   jobId?: string | null;
+  action?: TaskAction | null;
 }
 
 export interface DashboardActiveJobItem {

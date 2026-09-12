@@ -848,15 +848,33 @@ export class CrunchworkService {
   }
 
   async getProgressInvoice(params: { connectionId: string; progressInvoiceId: string }): Promise<Record<string, unknown>> {
-    return this.requestWithRetry({ method: 'GET', path: `/progress-invoices/${params.progressInvoiceId}`, connectionId: params.connectionId });
+    return this.requestWithRetry({
+      method: 'GET',
+      path: `/progress-invoices/${params.progressInvoiceId}`,
+      connectionId: params.connectionId,
+    });
   }
 
   async createProgressInvoice(params: { connectionId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
-    return this.requestWithRetry({ method: 'POST', path: '/progress-invoices', connectionId: params.connectionId, body: params.body });
+    return this.requestWithRetry({
+      method: 'POST',
+      path: '/progress-invoices',
+      connectionId: params.connectionId,
+      body: params.body,
+    });
   }
 
-  async updateProgressInvoice(params: { connectionId: string; progressInvoiceId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
-    return this.requestWithRetry({ method: 'POST', path: `/progress-invoices/${params.progressInvoiceId}`, connectionId: params.connectionId, body: params.body });
+  async updateProgressInvoice(params: {
+    connectionId: string;
+    progressInvoiceId: string;
+    body: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({
+      method: 'POST',
+      path: `/progress-invoices/${params.progressInvoiceId}`,
+      connectionId: params.connectionId,
+      body: params.body,
+    });
   }
 
   async getReportTypeSchema(params: { connectionId: string; reportTypeId: string }): Promise<Record<string, unknown>> {

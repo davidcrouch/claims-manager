@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { CheckSquare, Loader2 } from 'lucide-react';
+import { CheckSquare, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +37,8 @@ import {
 } from '@/components/forms/CreateSubmitOverlay';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { CW_TASK_TYPES } from '@/lib/cw-task-types';
+import { renderTaskAction } from '@/lib/task-action-renderer';
+import { useEntityDrawerOptional } from '@/components/layout/EntityDrawerHost';
 import type { Job, LookupRef, Task } from '@/types/api';
 
 const TASK_TYPES = CW_TASK_TYPES;
@@ -179,6 +182,8 @@ export function TaskFormDrawer({
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
   const [pickedJob, setPickedJob] = useState<Job | null>(null);
+  const router = useRouter();
+  const entityDrawer = useEntityDrawerOptional();
 
   const isEdit = !!task;
   const locked = submitting || busy || loadingTask;
@@ -355,6 +360,35 @@ export function TaskFormDrawer({
         {isEdit && task?.syncStatus && (
           <SyncStatusIndicator syncStatus={task.syncStatus} />
         )}
+        {isEdit && task?.action && (() => {
+          const taskStatus = refName(task.status);
+          if (taskStatus === 'Completed' || taskStatus === 'Cancelled') return null;
+          const result = renderTaskAction(task.action!);
+          if (!result) return null;
+
+          const handleAction = () => {
+            onOpenChange(false);
+            if (result.type === 'drawer' && entityDrawer) {
+              entityDrawer.openEntityDrawer({
+                component: result.component,
+                props: result.props,
+              });
+            } else if (result.type === 'navigate') {
+              router.push(result.href);
+            }
+          };
+
+          return (
+            <button
+              type="button"
+              onClick={handleAction}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+            >
+              <ExternalLink className="h-4 w-4" />
+              {task.action!.label}
+            </button>
+          );
+        })()}
         <div className="space-y-5">
           <FormSection title="Assignment">
             <div className="space-y-3">

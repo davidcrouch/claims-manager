@@ -1,9 +1,13 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   CalendarCheck,
   CheckSquare,
   ClipboardCheck,
+  ExternalLink,
   FileInput,
   FileQuestion,
   FileSpreadsheet,
@@ -12,6 +16,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { DashboardInboxItem } from '@/types/api';
 import { relativeDue } from './dashboard-inbox.copy';
+import { renderTaskAction } from '@/lib/task-action-renderer';
+import { useEntityDrawerOptional } from '@/components/layout/EntityDrawerHost';
 
 const ENTITY_ICONS: Record<string, LucideIcon> = {
   work_order: ClipboardCheck,
@@ -33,6 +39,26 @@ export function InboxRow({ item, emphasizeOverdue }: { item: DashboardInboxItem;
   const overdue = Boolean(
     emphasizeOverdue && item.dueAt && new Date(item.dueAt).getTime() < Date.now(),
   );
+  const router = useRouter();
+  const entityDrawer = useEntityDrawerOptional();
+
+  const actionResult = item.action ? renderTaskAction(item.action) : null;
+
+  function handleActionClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!actionResult) return;
+    if (actionResult.type === 'drawer' && entityDrawer) {
+      entityDrawer.openEntityDrawer({
+        component: actionResult.component,
+        props: actionResult.props,
+      });
+    } else if (actionResult.type === 'navigate') {
+      router.push(actionResult.href);
+    } else if (actionResult.type === 'drawer') {
+      router.push(item.href);
+    }
+  }
 
   return (
     <Link
@@ -48,6 +74,16 @@ export function InboxRow({ item, emphasizeOverdue }: { item: DashboardInboxItem;
           </div>
         )}
       </div>
+      {actionResult && item.action && (
+        <button
+          type="button"
+          onClick={handleActionClick}
+          className="shrink-0 inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+        >
+          <ExternalLink className="h-3 w-3" />
+          {item.action.label}
+        </button>
+      )}
       {due && (
         <span
           className={

@@ -44,6 +44,7 @@ import { BillsModule } from './modules/bills/bills.module';
 import { RfqsModule } from './modules/rfqs/rfqs.module';
 import { RfqRequestsModule } from './modules/rfq-requests/rfq-requests.module';
 import { PoIssuesModule } from './modules/po-issues/po-issues.module';
+import { InvoiceIssuesModule } from './modules/invoice-issues/invoice-issues.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { DomainModule } from './modules/domain/domain.module';
@@ -143,6 +144,7 @@ import { OfficeModule } from './common/office/office.module';
     RfqsModule,
     RfqRequestsModule,
     PoIssuesModule,
+    InvoiceIssuesModule,
     CommunicationsModule,
     ProposalsModule,
     BillsModule,

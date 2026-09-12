@@ -4,11 +4,8 @@ import { applyCrunchworkJobDates } from '../../../jobs/job-outbound.utils';
 import {
   applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
-  buildCrunchworkProgressInvoiceBody,
-  computeProgressInvoiceMoney,
   crunchworkInvoiceGroupsFromPayload,
-  shouldUseCrunchworkProgressInvoice,
-  sumLocalGroupsInclusiveTotal,
+  pickCrunchworkInvoiceIdForPurchaseOrder,
   toInvoiceUpdateGroups,
 } from '../../../invoices/invoice-publish.utils';
 import {
@@ -38,7 +35,13 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       case 'job':
         return this.pushJob(connectionId, entityId, action, payload);
       case 'invoice':
-        return this.pushInvoice(connectionId, entityId, action, payload);
+        return this.pushInvoice(
+          connectionId,
+          entityId,
+          action,
+          payload,
+          params.persistProgress,
+        );
       case 'quote':
         return this.pushQuote(connectionId, entityId, action, payload, params.persistProgress);
       case 'purchase_order':
@@ -96,30 +99,20 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
+    persistProgress?: OutboundAdapterPushParams['persistProgress'],
   ): Promise<OutboundPushResult> {
     if (action === 'publish') {
       const purchaseOrderId = payload.purchaseOrderId as string;
-      const resolved = this.resolvePublishInvoiceRoute(payload);
-      const cwInvoiceKind = resolved.kind;
-      const publishPayload = resolved.payload;
-      const reusedCwInvoiceId =
-        typeof publishPayload.reusedCwInvoiceId === 'string' &&
-        publishPayload.reusedCwInvoiceId
-          ? publishPayload.reusedCwInvoiceId
+      // Own CW id (retry) or sibling CW id (2nd+ claim when Partial Invoicing is
+      // disabled — staging returns 403 on /progress-invoices).
+      let reusedCwInvoiceId =
+        typeof payload.reusedCwInvoiceId === 'string' && payload.reusedCwInvoiceId
+          ? payload.reusedCwInvoiceId
           : undefined;
-
-      if (cwInvoiceKind === 'progress') {
-        return this.pushProgressInvoice({
-          connectionId,
-          entityId,
-          purchaseOrderId,
-          reusedCwInvoiceId,
-          payload: publishPayload,
-        });
-      }
 
       let cwInvoiceId: string;
       let apiObj: Record<string, unknown>;
+      let createdThisAttempt = false;
 
       if (reusedCwInvoiceId) {
         apiObj = await this.crunchwork.getInvoice({
@@ -132,27 +125,84 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
           purchaseOrderId,
           invoiceType: { externalReference: 'Invoice' },
         };
-        const createResponse = await this.crunchwork.createInvoice({
-          connectionId,
-          body: createBody,
-        });
-        const createObj = createResponse as Record<string, unknown>;
-        cwInvoiceId = createObj.id as string;
-        if (!cwInvoiceId) {
-          throw new Error('Crunchwork did not return an invoice id after create');
+        try {
+          const createResponse = await this.crunchwork.createInvoice({
+            connectionId,
+            body: createBody,
+          });
+          const createObj = createResponse as Record<string, unknown>;
+          cwInvoiceId = createObj.id as string;
+          if (!cwInvoiceId) {
+            throw new Error('Crunchwork did not return an invoice id after create');
+          }
+          apiObj = createObj;
+          createdThisAttempt = true;
+        } catch (createErr) {
+          if (!this.isPartialInvoicingConflict(createErr)) throw createErr;
+          const recovered = await this.discoverLinkedVendorTaxInvoice({
+            connectionId,
+            purchaseOrderId,
+          });
+          if (!recovered) throw createErr;
+          cwInvoiceId = recovered.cwInvoiceId;
+          apiObj = recovered.apiObj;
+          reusedCwInvoiceId = cwInvoiceId;
+          this.logger.warn(
+            `CrunchworkOutboundAdapter.pushInvoice — vendor-tax create blocked; ` +
+              `updating linked CW invoice ${cwInvoiceId} for ${entityId}`,
+          );
         }
-        apiObj = createObj;
       }
 
-      const localGroups = Array.isArray(publishPayload.localGroups)
-        ? (publishPayload.localGroups as Record<string, unknown>[])
+      const nextPayload: Record<string, unknown> = {
+        ...payload,
+        reusedCwInvoiceId: cwInvoiceId,
+        cwInvoiceKind: 'vendorTax',
+      };
+
+      if ((createdThisAttempt || reusedCwInvoiceId) && persistProgress) {
+        try {
+          await persistProgress({
+            result: {
+              externalReference: cwInvoiceId,
+              responsePayload: apiObj,
+            },
+            nextPayload,
+          });
+        } catch (err) {
+          this.logger.error(
+            `CrunchworkOutboundAdapter.pushInvoice — persistProgress failed for ${entityId} cwInvoiceId=${cwInvoiceId}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+
+      const localGroups = Array.isArray(payload.localGroups)
+        ? (payload.localGroups as Record<string, unknown>[])
         : [];
       const invoicedAmounts =
-        publishPayload.invoicedAmounts &&
-        typeof publishPayload.invoicedAmounts === 'object' &&
-        !Array.isArray(publishPayload.invoicedAmounts)
-          ? (publishPayload.invoicedAmounts as Record<string, number>)
+        payload.invoicedAmounts &&
+        typeof payload.invoicedAmounts === 'object' &&
+        !Array.isArray(payload.invoicedAmounts)
+          ? (payload.invoicedAmounts as Record<string, number>)
           : undefined;
+
+      // CW CreateVendorTaxInvoiceInput is minimal; set Submitted on update
+      // (status.externalReference per Insurance REST API §3.3.7).
+      const updateBody: Record<string, unknown> = {
+        status: { externalReference: 'Submitted' },
+      };
+      if (
+        typeof payload.vendorInvoiceNumber === 'string' &&
+        payload.vendorInvoiceNumber
+      ) {
+        updateBody.vendorInvoiceNumber = payload.vendorInvoiceNumber;
+      }
+      if (typeof payload.issueDate === 'string' && payload.issueDate) {
+        updateBody.issueDate = payload.issueDate;
+      }
+      if (typeof payload.note === 'string' && payload.note) {
+        updateBody.note = payload.note;
+      }
 
       if (localGroups.length > 0) {
         let cwGroups = crunchworkInvoiceGroupsFromPayload(apiObj);
@@ -175,29 +225,35 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
           });
           const updateGroups = toInvoiceUpdateGroups(allocated);
           if (updateGroups.length > 0) {
-            const updateBody: Record<string, unknown> = { groups: updateGroups };
-            if (
-              typeof publishPayload.vendorInvoiceNumber === 'string' &&
-              publishPayload.vendorInvoiceNumber
-            ) {
-              updateBody.vendorInvoiceNumber = publishPayload.vendorInvoiceNumber;
-            }
-            if (typeof publishPayload.issueDate === 'string' && publishPayload.issueDate) {
-              updateBody.issueDate = publishPayload.issueDate;
-            }
-            if (typeof publishPayload.note === 'string' && publishPayload.note) {
-              updateBody.note = publishPayload.note;
-            }
-            this.logger.log(
-              `CrunchworkOutboundAdapter.pushInvoice — updating vendor-tax ${cwInvoiceId} groups=${updateGroups.length}`,
-            );
-            apiObj = (await this.crunchwork.updateInvoice({
-              connectionId,
-              invoiceId: cwInvoiceId,
-              body: updateBody,
-            })) as Record<string, unknown>;
+            updateBody.groups = updateGroups;
           }
         }
+      }
+
+      this.logger.log(
+        `CrunchworkOutboundAdapter.pushInvoice — updating ${cwInvoiceId}` +
+          ` status=Submitted` +
+          (Array.isArray(updateBody.groups)
+            ? ` groups=${(updateBody.groups as unknown[]).length}`
+            : ' groups=0'),
+      );
+      try {
+        apiObj = (await this.crunchwork.updateInvoice({
+          connectionId,
+          invoiceId: cwInvoiceId,
+          body: updateBody,
+        })) as Record<string, unknown>;
+      } catch (err) {
+        throw new OutboundPartialSuccessError({
+          message: err instanceof Error ? err.message : String(err),
+          progress: {
+            result: {
+              externalReference: cwInvoiceId,
+              responsePayload: apiObj,
+            },
+            nextPayload,
+          },
+        });
       }
 
       return {
@@ -226,120 +282,111 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     return { responsePayload: response as Record<string, unknown> };
   }
 
-  /**
-   * Prefer explicit progress kind; otherwise re-detect from invoice total vs
-   * billable total so stale outbox retries stamped as vendorTax still hit
-   * /progress-invoices.
-   */
-  private resolvePublishInvoiceRoute(payload: Record<string, unknown>): {
-    kind: 'progress' | 'vendorTax';
-    payload: Record<string, unknown>;
-  } {
-    if (payload.cwInvoiceKind === 'progress') {
-      return { kind: 'progress', payload };
+  private isPartialInvoicingConflict(err: unknown): boolean {
+    const parts: string[] = [];
+    if (err instanceof Error) parts.push(err.message);
+    else parts.push(String(err));
+    const response = (err as { getResponse?: () => unknown })?.getResponse?.();
+    if (typeof response === 'string') parts.push(response);
+    else if (response && typeof response === 'object') {
+      const msg = (response as { message?: unknown }).message;
+      if (typeof msg === 'string') parts.push(msg);
+      else if (Array.isArray(msg)) parts.push(msg.map(String).join(' '));
     }
-
-    const localGroups = Array.isArray(payload.localGroups)
-      ? (payload.localGroups as Record<string, unknown>[])
-      : [];
-    const billableTotal = sumLocalGroupsInclusiveTotal(localGroups);
-    const headerTotal = Number(payload.total);
-    const invoiceTotal = Number.isFinite(headerTotal) && headerTotal > 0
-      ? headerTotal
-      : 0;
-
-    const detectedProgress = shouldUseCrunchworkProgressInvoice({
-      invoiceTotal,
-      billableTotal,
-      hasPriorPublishedSibling: false,
-    });
-
-    if (!detectedProgress) {
-      return { kind: 'vendorTax', payload };
-    }
-
-    const money = computeProgressInvoiceMoney({
-      groups: localGroups,
-      invoicedAmounts: undefined,
-      headerTotal: invoiceTotal > 0 ? invoiceTotal : null,
-    });
-    this.logger.warn(
-      `CrunchworkOutboundAdapter.resolvePublishInvoiceRoute — reclassified vendorTax→progress ` +
-        `total=${money.total} billableTotal=${billableTotal} (stale outbox payload)`,
-    );
-    return {
-      kind: 'progress',
-      payload: {
-        ...payload,
-        cwInvoiceKind: 'progress',
-        total: money.total,
-        totalTax: money.totalTax,
-        reusedCwInvoiceId: undefined,
-      },
-    };
+    return /already a linked invoice|Partial Invoicing/i.test(parts.join(' '));
   }
 
   /**
-   * Partial claims use POST /progress-invoices (CreateTradeInvoiceInput) — header
-   * totals only, one CW progress invoice per local publish (no sibling reuse).
+   * PO GET often returns invoices:[]. Discover the linked vendor-tax invoice via
+   * the job's invoice list when Partial Invoicing blocks a second create.
+   *
+   * PO.invoices maps to CW tradeInvoices (trade/progress only). Vendor Tax
+   * Invoices are separate and may appear under undocumented keys like
+   * vendorTaxInvoices or vendorTaxInvoice. GET /jobs/{id}/invoices (Phase 2,
+   * Insurance-only) is tried last but may 403/500 for Vendor connections.
    */
-  private async pushProgressInvoice(params: {
+  private async discoverLinkedVendorTaxInvoice(params: {
     connectionId: string;
-    entityId: string;
     purchaseOrderId: string;
-    reusedCwInvoiceId?: string;
-    payload: Record<string, unknown>;
-  }): Promise<OutboundPushResult> {
-    const { connectionId, purchaseOrderId, reusedCwInvoiceId, payload } = params;
-    const total = Number(payload.total);
-    if (!Number.isFinite(total) || total <= 0) {
-      throw new Error(
-        `CrunchworkOutboundAdapter.pushProgressInvoice — invalid total for invoice ${params.entityId}`,
-      );
-    }
-    const totalTaxRaw = Number(payload.totalTax);
-    const body = buildCrunchworkProgressInvoiceBody({
-      purchaseOrderId,
-      total,
-      totalTax: Number.isFinite(totalTaxRaw) ? totalTaxRaw : null,
-      invoiceNumber:
-        typeof payload.vendorInvoiceNumber === 'string'
-          ? payload.vendorInvoiceNumber
-          : null,
-      issueDate: typeof payload.issueDate === 'string' ? payload.issueDate : null,
-      comments: typeof payload.note === 'string' ? payload.note : null,
-    });
+  }): Promise<{ cwInvoiceId: string; apiObj: Record<string, unknown> } | null> {
+    if (!params.purchaseOrderId) return null;
+    try {
+      const po = await this.crunchwork.getPurchaseOrder({
+        connectionId: params.connectionId,
+        purchaseOrderId: params.purchaseOrderId,
+      });
 
-    if (reusedCwInvoiceId) {
-      this.logger.log(
-        `CrunchworkOutboundAdapter.pushProgressInvoice — updating ${reusedCwInvoiceId} total=${total}`,
-      );
-      const apiObj = (await this.crunchwork.updateProgressInvoice({
-        connectionId,
-        progressInvoiceId: reusedCwInvoiceId,
-        body,
-      })) as Record<string, unknown>;
-      return {
-        externalReference: reusedCwInvoiceId,
-        responsePayload: apiObj,
-      };
-    }
+      // PO.invoices is tradeInvoices per the CW spec — vendor-tax invoices
+      // may appear under undocumented keys.
+      let candidates: Record<string, unknown>[] = [];
+      for (const key of ['invoices', 'vendorTaxInvoices', 'vendorTaxInvoice'] as const) {
+        const value = po[key];
+        if (Array.isArray(value) && value.length > 0) {
+          candidates = value.filter(
+            (v): v is Record<string, unknown> => typeof v === 'object' && v !== null,
+          );
+          if (candidates.length > 0) break;
+        } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const obj = value as Record<string, unknown>;
+          if (typeof obj.id === 'string' && obj.id) {
+            candidates = [obj];
+            break;
+          }
+        }
+      }
 
-    this.logger.log(
-      `CrunchworkOutboundAdapter.pushProgressInvoice — creating purchaseOrderId=${purchaseOrderId} total=${total}`,
-    );
-    const createObj = (await this.crunchwork.createProgressInvoice({
-      connectionId,
-      body,
-    })) as Record<string, unknown>;
-    const cwInvoiceId = createObj.id as string;
-    if (!cwInvoiceId) {
-      throw new Error('Crunchwork did not return a progress invoice id after create');
+      const jobId = typeof po.jobId === 'string' ? po.jobId.trim() : '';
+      if (candidates.length === 0 && jobId) {
+        try {
+          candidates = await this.crunchwork.getJobInvoices({
+            connectionId: params.connectionId,
+            jobId,
+          });
+        } catch (jobInvErr) {
+          const errMsg = jobInvErr instanceof Error ? jobInvErr.message : String(jobInvErr);
+          const isAuthError = /not authorised|not authorized|forbidden/i.test(errMsg);
+          if (isAuthError) {
+            this.logger.error(
+              `CrunchworkOutboundAdapter.discoverLinkedVendorTaxInvoice — ` +
+                `GET /jobs/${jobId}/invoices returned auth error (Insurance-only endpoint). ` +
+                `Vendor connections cannot discover existing vendor-tax invoices via this path. ` +
+                `Set reusedCwInvoiceId in the outbound payload or sourceExternalReference on the local invoice.`,
+            );
+            throw new Error(
+              `Cannot discover existing CW vendor-tax invoice: GET /jobs/${jobId}/invoices ` +
+                `is not accessible with Vendor credentials. The PO already has a linked ` +
+                `vendor-tax invoice but its id is unknown. Manually set sourceExternalReference ` +
+                `on the local invoice to the CW invoice id, then republish.`,
+            );
+          }
+          this.logger.warn(
+            `CrunchworkOutboundAdapter.discoverLinkedVendorTaxInvoice — ` +
+              `GET /jobs/${jobId}/invoices failed (non-auth): ${errMsg}`,
+          );
+        }
+      }
+
+      const cwInvoiceId = pickCrunchworkInvoiceIdForPurchaseOrder({
+        invoices: candidates,
+        purchaseOrderId: params.purchaseOrderId,
+      });
+      if (!cwInvoiceId) return null;
+      const apiObj = await this.crunchwork.getInvoice({
+        connectionId: params.connectionId,
+        invoiceId: cwInvoiceId,
+      });
+      return { cwInvoiceId, apiObj };
+    } catch (err) {
+      this.logger.warn(
+        `CrunchworkOutboundAdapter.discoverLinkedVendorTaxInvoice — failed: ${err instanceof Error ? err.message : err}`,
+      );
+      // Re-throw auth/discovery errors so the outbound worker sees a clear message
+      // instead of the ambiguous Partial Invoicing create error.
+      if (err instanceof Error && /cannot discover existing cw vendor-tax invoice/i.test(err.message)) {
+        throw err;
+      }
+      return null;
     }
-    return {
-      externalReference: cwInvoiceId,
-      responsePayload: createObj,
-    };
   }
 
   private async pushQuote(
@@ -844,7 +891,7 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     const withDates = applyCrunchworkJobDates(out, payload);
     if (withDates.customData !== out.customData) {
       this.logger.debug(
-        'CrunchworkOutboundAdapter.transformJobPayload — including bookedDate/attendanceDate in CW customData',
+        'CrunchworkOutboundAdapter.transformJobPayload — including job dates in CW customData',
       );
     }
     return withDates;

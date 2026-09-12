@@ -1,7 +1,7 @@
 ---
 title: "Creating an Invoice"
 slug: creating-an-invoice
-description: "How to create a draft invoice from a work order and publish it internally or to the insurer."
+description: "How to create a draft invoice from a work order, choose the recipient, and publish to the insurer or by email."
 section: operations
 area: invoices
 routes:
@@ -25,20 +25,21 @@ related_guides:
   - accounts-receivable
   - purchase-orders
   - publishing-an-estimate
-version: 1
-last_updated: 2026-08-31
+version: 2
+last_updated: 2026-09-12
 ---
 
 # Creating an Invoice
 
-Create a **draft** invoice against an active work order, review totals and line items, then **Publish** when the document should lock (and, on insurer jobs, be sent to the insurer). This guide walks the create drawer and the live publish wizard.
+Create a **draft** invoice against an active work order, choose who receives it, review totals and line items, then **Publish** when the document should lock (and be delivered). This guide walks the create drawer and the publish wizard.
 
 ## Key Concepts
 
-- **Draft invoice** — created from **Create Invoice**; still editable enough to publish. Header **Publish** is available until the invoice has an upstream source reference.
+- **Draft invoice** — created from **Create Invoice**; still editable enough to publish. Header **Publish** is available until the invoice has an upstream source reference (or has been emailed/locked).
 - **Work order (required)** — every invoice is raised against an active (non-archived) work order. Archived work orders do not appear in the picker.
+- **Recipient** — chosen at create time: **Insurer** (Crunchwork push), **Insured** (email PDF/Word to the job's customer/insured contact), or **Other** (email to a contact you pick).
 - **Purchase order** — if the work order has a PO, create attaches that PO automatically; you do not pick it on the form.
-- **Publish** — locks the invoice and sets status to **Invoiced**. Internal jobs stay in EnsureOS; Crunchwork jobs send the invoice to the insurer.
+- **Publish** — locks the invoice and sets status to **Invoiced**. Delivery follows the stored recipient: insurer jobs go to Crunchwork; insured/other generate the invoice template and email it.
 
 ## Accessing Create Invoice
 
@@ -59,114 +60,91 @@ You can start from either place:
 
 ## Creating the Draft
 
-The drawer title is **Create Invoice**. Description: create a draft against an active work order; publish later from the invoice page.
+The drawer title is **Create Invoice**. Steps: **Details** → **Recipient** → **Amount & allocation** → (optional **Line amounts**) → **Confirm**.
 
-1. Select **Work Order** (required). Options show the job name and work-order reference when job names are available. Only non-archived work orders appear. On a job-scoped Invoices list, the picker is limited to that job’s work orders.
-2. Optionally enter **Invoice Number** (for example INV-001). If you leave it blank, EnsureOS can assign numbering later.
-3. Optionally enter **Total Amount**. If omitted, the total typically follows the work order / PO.
-4. Optionally set **Issue Date** (defaults to today) and **Due Date**.
-5. Optionally add a **Note**.
-6. Click **Create Invoice**.
+### Step 1 — Details
 
-EnsureOS opens the new invoice. Status is typically a draft until you publish.
+1. Select the **Job** (if not already scoped) and **Work Order** (required).
+2. Optionally set **Issue Date** (defaults to today), **Due Date**, and **Note**.
+3. Click **Next**.
 
-> **Note:** There is no line-item editor on create. Lines come from the linked PO or work order and appear on the invoice **Line Items** tab after create.
+### Step 2 — Recipient
 
-> **Tip:** Prefer creating from the work order after **Complete** (or your organisation’s invoice milestone) so you do not bill an Issued or in-progress WO by mistake.
+Choose who will receive the invoice when you publish:
+
+| Card | When available | On publish |
+|------|----------------|------------|
+| **Insurer** | Crunchwork / external jobs only | Push via Crunchwork API |
+| **Insured** | Always | Generate invoice Word/PDF and email the pre-selected Customer/Insured contact |
+| **Other** | Always | Same as Insured, but you pick the contact |
+
+- **Insured** shows the job's Customer/Insured contact (name and email). You cannot continue without an email on that contact.
+- **Other** opens a contact picker; the selected contact must have an email.
+
+### Step 3 — Amount & allocation (and optional line amounts)
+
+Choose how to distribute the invoice across line items (flat amount, flat percent, or per-line), then continue to **Confirm**.
+
+### Confirm and create
+
+Review job, work order, **recipient**, totals, and allocation, then click **Create Invoice**. EnsureOS opens the new draft.
+
+> **Tip:** Prefer creating from the work order after **Complete** (or your organisation's invoice milestone) so you do not bill an Issued or in-progress WO by mistake.
 
 ## Reviewing Before Publish
 
 On the invoice detail page:
 
-1. Check **Overview** — invoice number, insurer ref, totals, tax, excess, issue date.
+1. Check **Overview** — invoice number, recipient, insurer ref, totals, tax, excess, issue date.
 2. Open **Line Items** and confirm they match the authorised PO or work order.
 3. Confirm header links (**View PO** / **View work order** / job) point at the right records.
-4. Use **Print** only if you need a local PDF of the *draft*; that does not submit.
+4. Use **Print** only if you need a local PDF of the *draft*; that does not submit or email.
 
-If the total is wrong, fix the work order / PO or create a new invoice — do not expect to re-price lines on the invoice after publish.
+Approve the draft (**Draft → Reviewed**) before publish.
 
 ## Publishing the Invoice
 
-1. Click **Publish** in the header toolbar.
-2. The publish drawer opens. Title and confirm button depend on the job:
+1. Click **Publish** in the header toolbar (title may read **Email invoice** or **Submit to Insurer** depending on recipient).
+2. The publish drawer opens based on the stored recipient:
 
-| Job | Drawer title | Confirm button |
-|-----|--------------|----------------|
-| Not Crunchwork | **Publish invoice** | **Publish invoice** |
-| Crunchwork (insurer) | **Publish invoice to Insurer** | **Submit to Insurer** |
+| Recipient | Drawer | Confirm action |
+|-----------|--------|----------------|
+| Insurer (or legacy Crunchwork job) | **Publish invoice to Insurer** | **Submit to Insurer** |
+| Insured / Other | **Email invoice** (confirm → create report → send email) | **Send invoice** |
+| Internal / no email recipient (legacy) | **Publish invoice** | **Publish invoice** |
 
-### Step 1 — Read the warning
+### Insurer publish
 
-**Internal**
+Review the warning and summary, then submit. EnsureOS creates the invoice in Crunchwork and locks the local record.
 
-- The invoice will be locked after publish.
-- Status changes to **Invoiced**.
-- Invoice details cannot be edited afterwards.
+### Email publish (Insured / Other)
 
-**External (insurer)**
+1. **Confirm** — review summary and recipient email.
+2. **Create report** — generate the invoice Word/PDF from the invoice template (same pipeline as Print).
+3. **Send email** — set the subject and send. The document is attached; status becomes **Invoiced** and the invoice locks.
 
-- Submitting creates the invoice for the insurer against the linked work order.
-- Status changes to **Invoiced** and the invoice locks.
-- This cannot be undone from this screen.
+On success, a toast confirms publish or email, the drawer closes, and the page refreshes.
 
-### Step 2 — Review the summary
-
-The **Invoice summary** card shows:
-
-- Invoice number
-- Status
-- Total
-- Issue date
-- Work order
-- Purchase order (PO number, or insurer PO from the work order)
-
-Claim and job context appear below the summary.
-
-### Step 3 — Confirm
-
-1. Click **Cancel** to close without publishing, or
-2. Click **Publish invoice** / **Submit to Insurer**.
-
-The button shows **Publishing…** or **Sending to Insurer…** while the request runs. You cannot close the drawer during this step.
-
-On success, a toast reads **Invoice published** or **Invoice sent to Insurer**, the drawer closes, and the page refreshes. **Publish** disappears once an upstream source reference exists.
-
-> **Warning:** External publish notifies the insurer. Do not submit a draft with the wrong work order or total. There is no unpublish on this screen.
+> **Warning:** External publish notifies the insurer. Email publish notifies the chosen contact. Do not submit a draft with the wrong work order, total, or recipient. There is no unpublish on this screen.
 
 ## After Publish
 
-- Status is **Invoiced**.
-- **Receive Payment** appears on the header. Click it and enter the amount received. Any payment greater than 0 marks the invoice **Partially Paid**. When the total received is 100% of the invoice amount, status becomes **Paid**.
-- The invoice is locked.
-- It appears on [Accounts Receivable](../finance/accounts-receivable.md) ageing until it is paid.
-- Dashboard **AR overdue** will include it if it ages past your overdue rules.
+If you need another file copy, use **Print** and choose a template and folder (or download). See [Reports](../finance/reports.md).
 
-If you need a file copy, use **Print** and choose a template and folder (or download). See [Reports](../finance/reports.md).
+## Permissions
 
-## Permissions Recap
+| Permission | Use |
+|------------|-----|
+| `invoices.create` | Open and submit **Create Invoice** |
+| `invoices.read` | View invoice records |
+| `invoices.update` | Edit draft details / return to draft |
+| `invoices.approve` | Draft → Reviewed |
+| `invoices.publish` | Publish (insurer submit or email send) |
 
-| Permission | What it unlocks |
-|------------|-----------------|
-| `invoices.read` | List and detail |
-| `invoices.create` | **Create Invoice** drawer |
-| `invoices.update` | **Edit Invoice**, **Receive Payment**, and other updates |
-| `invoices.approve` | **Approve Invoice** on the invoice header (Draft → Reviewed) |
-| `invoices.publish` | **Publish** on a reviewed invoice (sets Invoiced) |
+## Best practices
 
-Members often have read-only invoice access. Estimators typically cannot create or approve invoices; Manager and Organisation Admin can.
-
-## Best Practices
-
-1. **Use the work order (and its PO) as the source of truth** for amount and lines — especially assessment or works fee POs.
-
-2. **One invoice per authorised milestone** unless your contract allows progress claims; do not double-bill the same WO.
-
+1. Set the correct **recipient** at create time so publish uses the right delivery path.
+2. Ensure the insured/other contact has a valid **email** before you reach publish.
 3. **Set issue and due dates** before publish so AR ageing starts from the correct day.
-
-4. **Publish from the invoice page**, not by emailing a printed draft, when the insurer must receive the document.
-
-5. **If a variation changed the PO**, create the invoice after that PO update so the total matches.
-
-6. **Check Line Items before submit** — payload-only invoices without a WO/PO link are harder to defend.
-
-7. **After publish, watch AR** rather than leaving submitted invoices only on the operational list.
+4. Prefer **Publish** (or email publish) over manually emailing a printed draft when the recipient must receive the official document.
+5. After publish, watch AR rather than leaving submitted invoices only on the operational list.

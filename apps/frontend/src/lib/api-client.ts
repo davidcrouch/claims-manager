@@ -3449,6 +3449,56 @@ export function createApiClient(options?: ApiClientOptions) {
       );
     },
 
+    // -- Invoice Send Requests --
+
+    listInvoiceSendRequests(invoiceId: string): Promise<InvoiceSendRequestListItem[]> {
+      return fetchApi<InvoiceSendRequestListItem[]>(
+        `/invoices/${invoiceId}/send-requests`,
+      );
+    },
+
+    getInvoiceSendRequest(
+      invoiceId: string,
+      requestId: string,
+    ): Promise<InvoiceSendRequestDetail> {
+      return fetchApi<InvoiceSendRequestDetail>(
+        `/invoices/${invoiceId}/send-requests/${requestId}`,
+      );
+    },
+
+    createInvoiceSendRequest(
+      invoiceId: string,
+      body: {
+        recipients: Array<{ contactId?: string; name: string; email: string }>;
+        generatedDocumentId: string;
+        emailSubject?: string;
+        emailBodyHtml?: string;
+        emailBodyText?: string;
+      },
+    ): Promise<InvoiceSendRequestDetail> {
+      return fetchApi<InvoiceSendRequestDetail>(
+        `/invoices/${invoiceId}/send-requests`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+    },
+
+    retryInvoiceSendRequest(
+      invoiceId: string,
+      requestId: string,
+      body: { recipients: Array<{ recipientId: string; email?: string }> },
+    ): Promise<InvoiceSendRequestDetail> {
+      return fetchApi<InvoiceSendRequestDetail>(
+        `/invoices/${invoiceId}/send-requests/${requestId}/retry`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+    },
+
     // -- Feedback --
 
     getFeedback(params: {
@@ -4021,6 +4071,52 @@ export interface PoIssueRequestDetail {
   emailBodyHtml: string;
   replyTo: string | null;
   recipients: PoIssueRequestRecipientDetail[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// -- Invoice Send Request types --
+
+export interface InvoiceSendRequestRecipientSummary {
+  id: string;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+}
+
+export interface InvoiceSendRequestListItem {
+  id: string;
+  invoiceId: string;
+  status: string;
+  initiatedBy: string | null;
+  emailSubject: string;
+  replyTo: string | null;
+  recipientCount: number;
+  recipients: InvoiceSendRequestRecipientSummary[];
+  createdAt: string;
+}
+
+export interface InvoiceSendRequestRecipientDetail {
+  id: string;
+  contactId: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+  retryCount: number;
+}
+
+export interface InvoiceSendRequestDetail {
+  id: string;
+  invoiceId: string;
+  status: string;
+  initiatedBy: string | null;
+  generatedDocId: string | null;
+  emailSubject: string;
+  emailBodyHtml: string;
+  replyTo: string | null;
+  recipients: InvoiceSendRequestRecipientDetail[];
   createdAt: string;
   updatedAt: string;
 }

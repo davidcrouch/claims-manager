@@ -73,6 +73,8 @@ const EMPTY_OVERVIEW: JobOverviewDraft = {
   customerContactDate: '',
   bookedDate: '',
   attendanceDate: '',
+  estimatedStartDate: '',
+  estimatedCompletionDate: '',
   statusLookupId: '',
   statusExternalReference: '',
   jobInstructions: '',

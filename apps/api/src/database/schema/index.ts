@@ -692,6 +692,12 @@ export const invoices = pgTable(
     invoicePayload: jsonb('invoice_payload').notNull().default({}),
     issuerOrganisationId: uuid('issuer_organisation_id').references(() => organizations.id),
     recipientOrganisationId: uuid('recipient_organisation_id').references(() => organizations.id),
+    /** Who the invoice is billed/sent to: insurer | insured | other */
+    recipientType: text('recipient_type'),
+    /** Contact for insured/other email delivery */
+    recipientContactId: uuid('recipient_contact_id').references(() => contacts.id, {
+      onDelete: 'set null',
+    }),
     sourceTenantId: uuid('source_tenant_id').references(() => organizations.id),
     sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
     sourceExternalReference: text('source_external_reference'),
@@ -724,6 +730,7 @@ export const invoices = pgTable(
       .where(sql`internal_number IS NOT NULL`),
     index('idx_invoices_source_tenant').on(t.sourceTenantId),
     index('idx_invoices_work_order').on(t.tenantId, t.workOrderId),
+    index('idx_invoices_recipient_contact').on(t.tenantId, t.recipientContactId),
   ],
 );
 
@@ -3657,6 +3664,58 @@ export const poSendRecipients = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_po_send_recipients_request').on(t.sendRequestId)],
+);
+
+// ---------------------------------------------------------------------------
+// Invoice Send Requests (email invoice PDF/DOCX to insured/other contacts)
+// ---------------------------------------------------------------------------
+export const invoiceSendRequests = pgTable(
+  'invoice_send_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    initiatedBy: text('initiated_by'),
+    generatedDocId: uuid('generated_doc_id'),
+    emailSubject: text('email_subject').notNull(),
+    emailBodyHtml: text('email_body_html').notNull(),
+    emailBodyText: text('email_body_text'),
+    replyTo: text('reply_to'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_invoice_send_requests_invoice').on(t.tenantId, t.invoiceId),
+    index('idx_invoice_send_requests_status').on(t.status),
+  ],
+);
+
+export const invoiceSendRecipients = pgTable(
+  'invoice_send_recipients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sendRequestId: uuid('send_request_id')
+      .notNull()
+      .references(() => invoiceSendRequests.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    recipientName: text('recipient_name').notNull(),
+    recipientEmail: text('recipient_email').notNull(),
+    status: text('status').notNull().default('pending'),
+    errorMessage: text('error_message'),
+    resendMessageId: text('resend_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    retryCount: integer('retry_count').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_invoice_send_recipients_request').on(t.sendRequestId)],
 );
 
 // ---------------------------------------------------------------------------

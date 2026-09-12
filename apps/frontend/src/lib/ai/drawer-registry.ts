@@ -170,6 +170,13 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.JournalFileUploadDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
+  InvoiceFormDrawer: {
+    title: 'Create Invoice',
+    loader: () =>
+      import('@/components/forms/InvoiceFormDrawer').then((m) => ({
+        default: m.InvoiceFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
   JournalImageViewerDrawer: {
     title: 'Inspection photo',
     loader: () =>

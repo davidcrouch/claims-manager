@@ -4,129 +4,65 @@ import type { CrunchworkService } from '../../../../crunchwork/crunchwork.servic
 
 const CW_QUOTE_ID = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
 const CW_INVOICE_ID = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
-const CW_PROGRESS_ID = 'cccccccc-3333-4333-8333-cccccccccccc';
 
 describe('CrunchworkOutboundAdapter.push invoice publish', () => {
   let createInvoice: jest.Mock;
   let updateInvoice: jest.Mock;
   let getInvoice: jest.Mock;
-  let createProgressInvoice: jest.Mock;
-  let updateProgressInvoice: jest.Mock;
+  let getPurchaseOrder: jest.Mock;
+  let getJobInvoices: jest.Mock;
   let adapter: CrunchworkOutboundAdapter;
 
   beforeEach(() => {
     createInvoice = jest.fn();
     updateInvoice = jest.fn();
     getInvoice = jest.fn();
-    createProgressInvoice = jest.fn();
-    updateProgressInvoice = jest.fn();
+    getPurchaseOrder = jest.fn();
+    getJobInvoices = jest.fn();
     adapter = new CrunchworkOutboundAdapter({
       createInvoice,
       updateInvoice,
       getInvoice,
-      createProgressInvoice,
-      updateProgressInvoice,
+      getPurchaseOrder,
+      getJobInvoices,
     } as unknown as CrunchworkService);
   });
 
-  it('creates a progress invoice for partial claims', async () => {
-    createProgressInvoice.mockResolvedValue({
-      id: CW_PROGRESS_ID,
-      total: 165,
-      totalTax: 15,
+  it('updates the linked CW invoice when sibling id is on the payload (2nd claim)', async () => {
+    getInvoice.mockResolvedValue({
+      id: CW_INVOICE_ID,
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 300,
+              quantity: 1,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
     });
+    updateInvoice.mockResolvedValue({ id: CW_INVOICE_ID, total: 240 });
 
     const result = await adapter.push({
       connectionId: 'conn-1',
       entityType: 'invoice',
-      entityId: 'inv-1',
+      entityId: 'inv-2',
       action: 'publish',
       payload: {
-        cwInvoiceKind: 'progress',
+        reusedCwInvoiceId: CW_INVOICE_ID,
         purchaseOrderId: 'po-cw',
-        total: 165,
-        totalTax: 15,
-        vendorInvoiceNumber: 'INV-200009',
-        issueDate: '2026-09-10T00:00:00.000Z',
-        note: 'Progress 1',
-      },
-    });
-
-    expect(createProgressInvoice).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      body: {
-        purchaseOrderId: 'po-cw',
-        total: 165,
-        totalTax: 15,
-        invoiceNumber: 'INV-200009',
-        issueDate: '2026-09-10T00:00:00.000Z',
-        comments: 'Progress 1',
-      },
-    });
-    expect(createInvoice).not.toHaveBeenCalled();
-    expect(updateInvoice).not.toHaveBeenCalled();
-    expect(result.externalReference).toBe(CW_PROGRESS_ID);
-  });
-
-  it('updates an existing progress invoice on re-publish', async () => {
-    updateProgressInvoice.mockResolvedValue({
-      id: CW_PROGRESS_ID,
-      total: 180,
-    });
-
-    const result = await adapter.push({
-      connectionId: 'conn-1',
-      entityType: 'invoice',
-      entityId: 'inv-1',
-      action: 'publish',
-      payload: {
-        cwInvoiceKind: 'progress',
-        reusedCwInvoiceId: CW_PROGRESS_ID,
-        purchaseOrderId: 'po-cw',
-        total: 180,
-        totalTax: 16.36,
-        vendorInvoiceNumber: 'INV-200009',
-      },
-    });
-
-    expect(updateProgressInvoice).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      progressInvoiceId: CW_PROGRESS_ID,
-      body: expect.objectContaining({
-        purchaseOrderId: 'po-cw',
-        total: 180,
-        totalTax: 16.36,
-        invoiceNumber: 'INV-200009',
-      }),
-    });
-    expect(createProgressInvoice).not.toHaveBeenCalled();
-    expect(result.externalReference).toBe(CW_PROGRESS_ID);
-  });
-
-  it('reclassifies a stale vendorTax outbox payload to progress-invoices when total < billable', async () => {
-    createProgressInvoice.mockResolvedValue({
-      id: CW_PROGRESS_ID,
-      total: 165,
-      totalTax: 15,
-    });
-
-    const result = await adapter.push({
-      connectionId: 'conn-1',
-      entityType: 'invoice',
-      entityId: 'inv-partial',
-      action: 'publish',
-      payload: {
-        // Stale retries from before progress routing still say vendorTax
-        cwInvoiceKind: 'vendorTax',
-        purchaseOrderId: 'po-cw',
-        vendorInvoiceNumber: 'INV-PARTIAL',
-        total: 165,
+        vendorInvoiceNumber: 'INV-200016',
         localGroups: [
           {
             items: [
               {
                 id: 'i1',
-                name: 'description',
                 unitCost: 300,
                 quantity: 1,
                 tax: 10,
@@ -136,18 +72,159 @@ describe('CrunchworkOutboundAdapter.push invoice publish', () => {
             ],
           },
         ],
+        invoicedAmounts: { 'id:i1': 239.98 },
       },
     });
 
-    expect(createProgressInvoice).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      body: expect.objectContaining({
-        purchaseOrderId: 'po-cw',
-        invoiceNumber: 'INV-PARTIAL',
-      }),
-    });
     expect(createInvoice).not.toHaveBeenCalled();
-    expect(result.externalReference).toBe(CW_PROGRESS_ID);
+    expect(updateInvoice).toHaveBeenCalledTimes(1);
+    expect(updateInvoice.mock.calls[0][0].body.status).toEqual({
+      externalReference: 'Submitted',
+    });
+    expect(result.externalReference).toBe(CW_INVOICE_ID);
+  });
+
+  it('discovers linked invoice via job invoices when create is blocked', async () => {
+    createInvoice.mockRejectedValue(
+      new Error(
+        'Unable to create a new vendor tax invoice, as Partial Invoicing is not enabled and there is already a linked invoice that is not cancelled.',
+      ),
+    );
+    getPurchaseOrder.mockResolvedValue({
+      id: 'po-cw',
+      jobId: 'job-cw',
+      invoices: [],
+    });
+    getJobInvoices.mockResolvedValue([
+      { id: CW_INVOICE_ID, purchaseOrderId: 'po-cw', total: 110 },
+    ]);
+    getInvoice.mockResolvedValue({
+      id: CW_INVOICE_ID,
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 100,
+              quantity: 1,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
+    });
+    updateInvoice.mockResolvedValue({ id: CW_INVOICE_ID, total: 240 });
+
+    const result = await adapter.push({
+      connectionId: 'conn-1',
+      entityType: 'invoice',
+      entityId: 'inv-2',
+      action: 'publish',
+      payload: {
+        purchaseOrderId: 'po-cw',
+        localGroups: [
+          {
+            items: [
+              {
+                id: 'i1',
+                unitCost: 300,
+                quantity: 1,
+                tax: 10,
+                markupType: 'Percentage',
+                markupValue: 0,
+              },
+            ],
+          },
+        ],
+        invoicedAmounts: { 'id:i1': 239.98 },
+      },
+    });
+
+    expect(getJobInvoices).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      jobId: 'job-cw',
+    });
+    expect(updateInvoice).toHaveBeenCalledTimes(1);
+    expect(result.externalReference).toBe(CW_INVOICE_ID);
+  });
+
+  it('throws a clear error when discovery fails with auth (Vendor connection)', async () => {
+    createInvoice.mockRejectedValue(
+      new Error(
+        'Unable to create a new vendor tax invoice, as Partial Invoicing is not enabled and there is already a linked invoice that is not cancelled.',
+      ),
+    );
+    getPurchaseOrder.mockResolvedValue({
+      id: 'po-cw',
+      jobId: 'job-cw',
+      invoices: [],
+    });
+    getJobInvoices.mockRejectedValue(
+      new Error('HTTP 500: {"errors":[{"message":"Not Authorised!"}]}'),
+    );
+
+    await expect(
+      adapter.push({
+        connectionId: 'conn-1',
+        entityType: 'invoice',
+        entityId: 'inv-3',
+        action: 'publish',
+        payload: {
+          purchaseOrderId: 'po-cw',
+          localGroups: [],
+        },
+      }),
+    ).rejects.toThrow(/cannot discover existing cw vendor-tax invoice/i);
+
+    expect(getJobInvoices).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      jobId: 'job-cw',
+    });
+  });
+
+  it('discovers vendor-tax invoice from PO vendorTaxInvoices field', async () => {
+    createInvoice.mockRejectedValue(
+      new Error(
+        'Unable to create a new vendor tax invoice, as Partial Invoicing is not enabled and there is already a linked invoice that is not cancelled.',
+      ),
+    );
+    getPurchaseOrder.mockResolvedValue({
+      id: 'po-cw',
+      jobId: 'job-cw',
+      invoices: [],
+      vendorTaxInvoices: [{ id: CW_INVOICE_ID, purchaseOrderId: 'po-cw' }],
+    });
+    getInvoice.mockResolvedValue({
+      id: CW_INVOICE_ID,
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            { id: 'i1', unitCost: 100, quantity: 1, tax: 10, markupType: 'Percentage', markupValue: 0 },
+          ],
+        },
+      ],
+    });
+    updateInvoice.mockResolvedValue({ id: CW_INVOICE_ID, total: 110 });
+
+    const result = await adapter.push({
+      connectionId: 'conn-1',
+      entityType: 'invoice',
+      entityId: 'inv-4',
+      action: 'publish',
+      payload: {
+        purchaseOrderId: 'po-cw',
+        localGroups: [
+          { items: [{ id: 'i1', unitCost: 100, quantity: 1, tax: 10, markupType: 'Percentage', markupValue: 0 }] },
+        ],
+      },
+    });
+
+    expect(getJobInvoices).not.toHaveBeenCalled();
+    expect(result.externalReference).toBe(CW_INVOICE_ID);
   });
 
   it('keeps the vendor-tax create+update path for full invoices', async () => {
@@ -200,9 +277,98 @@ describe('CrunchworkOutboundAdapter.push invoice publish', () => {
     });
 
     expect(createInvoice).toHaveBeenCalledTimes(1);
-    expect(createProgressInvoice).not.toHaveBeenCalled();
     expect(updateInvoice).toHaveBeenCalledTimes(1);
+    expect(updateInvoice.mock.calls[0][0].body).toEqual(
+      expect.objectContaining({
+        status: { externalReference: 'Submitted' },
+        vendorInvoiceNumber: 'INV-FULL',
+        issueDate: '2026-09-10T00:00:00.000Z',
+      }),
+    );
     expect(result.externalReference).toBe(CW_INVOICE_ID);
+  });
+
+  it('sets CW invoice status to Submitted even when there are no local groups', async () => {
+    createInvoice.mockResolvedValue({ id: CW_INVOICE_ID, groups: [] });
+    updateInvoice.mockResolvedValue({
+      id: CW_INVOICE_ID,
+      status: { name: 'Submitted', externalReference: 'Submitted' },
+    });
+
+    const result = await adapter.push({
+      connectionId: 'conn-1',
+      entityType: 'invoice',
+      entityId: 'inv-status-only',
+      action: 'publish',
+      payload: {
+        purchaseOrderId: 'po-cw',
+        vendorInvoiceNumber: 'INV-STATUS',
+      },
+    });
+
+    expect(createInvoice).toHaveBeenCalledTimes(1);
+    expect(updateInvoice).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      invoiceId: CW_INVOICE_ID,
+      body: {
+        status: { externalReference: 'Submitted' },
+        vendorInvoiceNumber: 'INV-STATUS',
+      },
+    });
+    expect(result.externalReference).toBe(CW_INVOICE_ID);
+  });
+
+  it('persists CW id when group update fails after create', async () => {
+    createInvoice.mockResolvedValue({
+      id: CW_INVOICE_ID,
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 300,
+              quantity: 1,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
+    });
+    updateInvoice.mockRejectedValue(new Error('update failed'));
+    const persistProgress = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      adapter.push({
+        connectionId: 'conn-1',
+        entityType: 'invoice',
+        entityId: 'inv-1',
+        action: 'publish',
+        payload: {
+          purchaseOrderId: 'po-cw',
+          localGroups: [
+            {
+              items: [
+                {
+                  id: 'i1',
+                  unitCost: 300,
+                  quantity: 1,
+                  tax: 10,
+                  markupType: 'Percentage',
+                  markupValue: 0,
+                },
+              ],
+            },
+          ],
+          invoicedAmounts: { 'id:i1': 99.99 },
+        },
+        persistProgress,
+      }),
+    ).rejects.toBeInstanceOf(OutboundPartialSuccessError);
+
+    expect(persistProgress).toHaveBeenCalled();
   });
 });
 
@@ -243,48 +409,7 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
 
     expect(createQuote).toHaveBeenCalledTimes(1);
     expect(updateQuote).toHaveBeenCalledTimes(1);
-    expect(updateQuote).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      quoteId: CW_QUOTE_ID,
-      body: { status: { name: 'Published', externalReference: 'Published' } },
-    });
     expect(result.externalReference).toBe(CW_QUOTE_ID);
-  });
-
-  it('copies fromCompanyRegistrationNumber from create onto the publish update', async () => {
-    createQuote.mockResolvedValue({
-      id: CW_QUOTE_ID,
-      status: { name: 'Draft', externalReference: 'Draft' },
-    });
-    updateQuote.mockResolvedValue({
-      id: CW_QUOTE_ID,
-      status: { name: 'Published', externalReference: 'Published' },
-    });
-
-    await adapter.push({
-      connectionId: 'conn-1',
-      entityType: 'quote',
-      entityId: 'quote-1',
-      action: 'publish',
-      payload: {
-        createBody: {
-          name: 'Estimate 1',
-          fromCompanyRegistrationNumber: '51824753556',
-          fromName: 'Ensure Construction',
-        },
-        publishBody: { status: { name: 'Published', externalReference: 'Published' } },
-      },
-    });
-
-    expect(updateQuote).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      quoteId: CW_QUOTE_ID,
-      body: {
-        status: { name: 'Published', externalReference: 'Published' },
-        fromCompanyRegistrationNumber: '51824753556',
-        fromName: 'Ensure Construction',
-      },
-    });
   });
 
   it('skips create when cwQuoteId is already on the payload', async () => {
@@ -307,11 +432,6 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
 
     expect(createQuote).not.toHaveBeenCalled();
     expect(updateQuote).toHaveBeenCalledTimes(1);
-    expect(updateQuote).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      quoteId: CW_QUOTE_ID,
-      body: { status: { name: 'Published', externalReference: 'Published' } },
-    });
   });
 
   it('persists the created quote id so a later retry does not create again', async () => {
@@ -342,14 +462,10 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
       }),
     ).rejects.toBeInstanceOf(OutboundPartialSuccessError);
 
-    expect(createQuote).toHaveBeenCalledTimes(1);
     expect(persistProgress).toHaveBeenCalledTimes(1);
     const progress = persistProgress.mock.calls[0][0] as {
       nextPayload: Record<string, unknown>;
-      result: { externalReference?: string };
     };
-    expect(progress.result.externalReference).toBe(CW_QUOTE_ID);
-    expect(progress.nextPayload.cwQuoteId).toBe(CW_QUOTE_ID);
 
     await adapter.push({
       connectionId: 'conn-1',

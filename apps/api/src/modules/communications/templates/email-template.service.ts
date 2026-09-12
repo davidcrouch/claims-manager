@@ -5,6 +5,7 @@ import type { DrizzleDB } from '../../../database/drizzle.module';
 import { emailTemplates } from '../../../database/schema';
 import { DEFAULT_RFQ_EMAIL_TEMPLATE } from './default-rfq-email';
 import { DEFAULT_PO_EMAIL_TEMPLATE } from './default-po-email';
+import { DEFAULT_INVOICE_EMAIL_TEMPLATE } from './default-invoice-email';
 import { defaultFeedbackEmailTemplate } from './default-feedback-email';
 
 export interface ResolvedEmailTemplate {
@@ -18,6 +19,9 @@ export interface TemplateMergeFields {
   rfq_name?: string;
   po_number?: string;
   po_name?: string;
+  invoice_number?: string;
+  invoice_amount?: string;
+  job_name?: string;
   recipient_name?: string;
   sender_name?: string;
   company_name?: string;
@@ -34,6 +38,7 @@ export class EmailTemplateService {
 
   private defaultForType(templateType: string): ResolvedEmailTemplate {
     if (templateType === 'po_send') return DEFAULT_PO_EMAIL_TEMPLATE;
+    if (templateType === 'invoice_send') return DEFAULT_INVOICE_EMAIL_TEMPLATE;
     const feedback = defaultFeedbackEmailTemplate(templateType);
     if (feedback) return feedback;
     return DEFAULT_RFQ_EMAIL_TEMPLATE;

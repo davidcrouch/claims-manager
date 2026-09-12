@@ -325,6 +325,13 @@ export {
   type PoSendRecipientInsert,
 } from './po-send-requests.repository';
 export {
+  InvoiceSendRequestsRepository,
+  type InvoiceSendRequestRow,
+  type InvoiceSendRequestInsert,
+  type InvoiceSendRecipientRow,
+  type InvoiceSendRecipientInsert,
+} from './invoice-send-requests.repository';
+export {
   EmailTemplatesRepository,
   type EmailTemplateRow,
   type EmailTemplateInsert,

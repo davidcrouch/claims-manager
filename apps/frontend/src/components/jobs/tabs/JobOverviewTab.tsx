@@ -38,6 +38,8 @@ export interface JobOverviewTabHandle {
     customerContactDate: string | null;
     bookedDate: string | null;
     attendanceDate: string | null;
+    estimatedStartDate: string | null;
+    estimatedCompletionDate: string | null;
   };
   getBaseline: () => JobOverviewDraft;
   applyDraft: (draft: JobOverviewDraft) => void;
@@ -168,11 +170,21 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const bookedDateRaw = asString(pick(custom, 'bookedDate') ?? pick(api, 'bookedDate'));
   const attendanceDueDate = asString(pick(custom, 'attendanceDueDate') ?? pick(api, 'attendanceDueDate'));
   const attendanceDateRaw = asString(pick(custom, 'attendanceDate') ?? pick(api, 'attendanceDate'));
+  const estimatedStartDateRaw = asString(
+    pick(custom, 'estimatedStartDate') ?? pick(api, 'estimatedStartDate'),
+  );
+  const estimatedCompletionDateRaw = asString(
+    pick(custom, 'estimatedCompletionDate') ?? pick(api, 'estimatedCompletionDate'),
+  );
   const completedDate = asString(pick(custom, 'completedDate') ?? pick(api, 'completedDate'));
 
   const [customerContactDate, setCustomerContactDate] = useState(customerContactDateRaw ?? '');
   const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
   const [attendanceDate, setAttendanceDate] = useState(attendanceDateRaw ?? '');
+  const [estimatedStartDate, setEstimatedStartDate] = useState(estimatedStartDateRaw ?? '');
+  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(
+    estimatedCompletionDateRaw ?? '',
+  );
 
   const [statusLookupId, setStatusLookupId] = useState(job.statusLookupId ?? job.status?.id ?? '');
   const [statusExternalReference, setStatusExternalReference] = useState(
@@ -189,6 +201,12 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   );
   const [savedBookedDate, setSavedBookedDate] = useState(bookedDateRaw ?? '');
   const [savedAttendanceDate, setSavedAttendanceDate] = useState(attendanceDateRaw ?? '');
+  const [savedEstimatedStartDate, setSavedEstimatedStartDate] = useState(
+    estimatedStartDateRaw ?? '',
+  );
+  const [savedEstimatedCompletionDate, setSavedEstimatedCompletionDate] = useState(
+    estimatedCompletionDateRaw ?? '',
+  );
   const [savedStatusLookupId, setSavedStatusLookupId] = useState(
     job.statusLookupId ?? job.status?.id ?? '',
   );
@@ -203,6 +221,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     const nextCustomerContact = customerContactDateRaw ?? '';
     const nextBooked = bookedDateRaw ?? '';
     const nextAttendance = attendanceDateRaw ?? '';
+    const nextEstimatedStart = estimatedStartDateRaw ?? '';
+    const nextEstimatedCompletion = estimatedCompletionDateRaw ?? '';
     const nextStatusId = job.statusLookupId ?? job.status?.id ?? '';
     const nextStatusExt = job.status?.externalReference ?? '';
     const nextInstructions = job.jobInstructions ?? '';
@@ -210,6 +230,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setCustomerContactDate(nextCustomerContact);
     setBookedDate(nextBooked);
     setAttendanceDate(nextAttendance);
+    setEstimatedStartDate(nextEstimatedStart);
+    setEstimatedCompletionDate(nextEstimatedCompletion);
     setStatusLookupId(nextStatusId);
     setStatusExternalReference(nextStatusExt);
     setJobInstructions(nextInstructions);
@@ -217,6 +239,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setSavedCustomerContactDate(nextCustomerContact);
     setSavedBookedDate(nextBooked);
     setSavedAttendanceDate(nextAttendance);
+    setSavedEstimatedStartDate(nextEstimatedStart);
+    setSavedEstimatedCompletionDate(nextEstimatedCompletion);
     setSavedStatusLookupId(nextStatusId);
     setSavedStatusExternalReference(nextStatusExt);
     setSavedJobInstructions(nextInstructions);
@@ -228,6 +252,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     customerContactDate !== savedCustomerContactDate ||
     bookedDate !== savedBookedDate ||
     attendanceDate !== savedAttendanceDate ||
+    estimatedStartDate !== savedEstimatedStartDate ||
+    estimatedCompletionDate !== savedEstimatedCompletionDate ||
     (caps.job.statusEditable.editable && statusLookupId !== savedStatusLookupId) ||
     (caps.job.instructionsEditable.editable && jobInstructions !== savedJobInstructions) ||
     (caps.job.vendorExtRefEditable.editable && vendorExtRef !== savedVendorExtRef);
@@ -240,6 +266,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     customerContactDate,
     bookedDate,
     attendanceDate,
+    estimatedStartDate,
+    estimatedCompletionDate,
     statusLookupId,
     jobInstructions,
     vendorExtRef,
@@ -251,6 +279,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       customerContactDate: customerContactDate || null,
       bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
+      estimatedStartDate: estimatedStartDate || null,
+      estimatedCompletionDate: estimatedCompletionDate || null,
     };
     if (caps.job.statusEditable.editable) {
       pending.statusLookupId = statusLookupId || null;
@@ -269,6 +299,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setCustomerContactDate(savedCustomerContactDate);
     setBookedDate(savedBookedDate);
     setAttendanceDate(savedAttendanceDate);
+    setEstimatedStartDate(savedEstimatedStartDate);
+    setEstimatedCompletionDate(savedEstimatedCompletionDate);
     setStatusLookupId(savedStatusLookupId);
     setStatusExternalReference(savedStatusExternalReference);
     setJobInstructions(savedJobInstructions);
@@ -279,6 +311,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setCustomerContactDate(next.customerContactDate);
     setBookedDate(next.bookedDate);
     setAttendanceDate(next.attendanceDate);
+    setEstimatedStartDate(next.estimatedStartDate);
+    setEstimatedCompletionDate(next.estimatedCompletionDate);
     setStatusLookupId(next.statusLookupId);
     setStatusExternalReference(next.statusExternalReference);
     setJobInstructions(next.jobInstructions);
@@ -292,6 +326,12 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       }
       if (saved.bookedDate !== undefined) setSavedBookedDate(saved.bookedDate ?? '');
       if (saved.attendanceDate !== undefined) setSavedAttendanceDate(saved.attendanceDate ?? '');
+      if (saved.estimatedStartDate !== undefined) {
+        setSavedEstimatedStartDate(saved.estimatedStartDate ?? '');
+      }
+      if (saved.estimatedCompletionDate !== undefined) {
+        setSavedEstimatedCompletionDate(saved.estimatedCompletionDate ?? '');
+      }
       if (saved.statusLookupId !== undefined) setSavedStatusLookupId(saved.statusLookupId ?? '');
       if (saved.statusExternalReference !== undefined) {
         setSavedStatusExternalReference(saved.statusExternalReference ?? '');
@@ -305,6 +345,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setSavedCustomerContactDate(customerContactDate);
     setSavedBookedDate(bookedDate);
     setSavedAttendanceDate(attendanceDate);
+    setSavedEstimatedStartDate(estimatedStartDate);
+    setSavedEstimatedCompletionDate(estimatedCompletionDate);
     setSavedStatusLookupId(statusLookupId);
     setSavedStatusExternalReference(statusExternalReference);
     setSavedJobInstructions(jobInstructions);
@@ -318,11 +360,15 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       customerContactDate: customerContactDate || null,
       bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
+      estimatedStartDate: estimatedStartDate || null,
+      estimatedCompletionDate: estimatedCompletionDate || null,
     }),
     getBaseline: () => ({
       customerContactDate: savedCustomerContactDate,
       bookedDate: savedBookedDate,
       attendanceDate: savedAttendanceDate,
+      estimatedStartDate: savedEstimatedStartDate,
+      estimatedCompletionDate: savedEstimatedCompletionDate,
       statusLookupId: savedStatusLookupId,
       statusExternalReference: savedStatusExternalReference,
       jobInstructions: savedJobInstructions,
@@ -338,6 +384,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     customerContactDate,
     bookedDate,
     attendanceDate,
+    estimatedStartDate,
+    estimatedCompletionDate,
     statusLookupId,
     statusExternalReference,
     jobInstructions,
@@ -345,6 +393,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     savedCustomerContactDate,
     savedBookedDate,
     savedAttendanceDate,
+    savedEstimatedStartDate,
+    savedEstimatedCompletionDate,
     savedStatusLookupId,
     savedStatusExternalReference,
     savedJobInstructions,
@@ -542,6 +592,38 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
               formatDate(attendanceDate || attendanceDateRaw)
             )
           } />
+          <DefRow
+            label="Start Date"
+            value={
+              editing ? (
+                <Input
+                  type="date"
+                  value={toInputDate(estimatedStartDate)}
+                  onChange={(e) => setEstimatedStartDate(e.target.value)}
+                  disabled={saving}
+                  className="h-7 w-40 text-sm"
+                />
+              ) : (
+                formatDate(estimatedStartDate || estimatedStartDateRaw)
+              )
+            }
+          />
+          <DefRow
+            label="End Date"
+            value={
+              editing ? (
+                <Input
+                  type="date"
+                  value={toInputDate(estimatedCompletionDate)}
+                  onChange={(e) => setEstimatedCompletionDate(e.target.value)}
+                  disabled={saving}
+                  className="h-7 w-40 text-sm"
+                />
+              ) : (
+                formatDate(estimatedCompletionDate || estimatedCompletionDateRaw)
+              )
+            }
+          />
           <DefRow label="Completed date" value={formatDate(completedDate)} />
         </SectionCard>
         {(vendorName || vendorExtRefInitial || vendorPhone || vendorEmail || caps.job.vendorSection.visible) && (
@@ -630,12 +712,16 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
                   value={jobInstructions}
                   onChange={setJobInstructions}
                   disabled={saving}
-                  rows={5}
+                  rows={12}
+                  className="min-h-48 w-full text-sm"
                 />
               ) : instructionsHtml ? (
-                <div className="prose prose-sm max-w-none text-sm" dangerouslySetInnerHTML={{ __html: instructionsHtml }} />
+                <div
+                  className="prose prose-sm min-h-48 max-w-none text-sm"
+                  dangerouslySetInnerHTML={{ __html: instructionsHtml }}
+                />
               ) : (
-                <p className="text-sm text-muted-foreground"><FileText className="mr-1 inline h-3 w-3" />No job instructions provided.</p>
+                <p className="min-h-48 text-sm text-muted-foreground"><FileText className="mr-1 inline h-3 w-3" />No job instructions provided.</p>
               )}
             </CardContent>
           </Card>

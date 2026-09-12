@@ -2,7 +2,6 @@
   "Comment": "Builder Works job lifecycle: Allocated -> Scope -> Excess -> Schedule -> Repairs -> Complete -> Certificate -> Invoice -> Job Complete",
   "StartAt": "SetupWorksJob",
   "States": {
-
     "SetupWorksJob": {
       "Type": "Pass",
       "Parameters": {
@@ -22,7 +21,6 @@
       },
       "Next": "CreateInitialTasks"
     },
-
     "CreateInitialTasks": {
       "Type": "Task",
       "Comment": "Create Send Scope/Contract task and recurring Repair Update task.",
@@ -51,7 +49,6 @@
       "ResultPath": "$.sendScopeTask",
       "Next": "CreateRepairUpdateTask"
     },
-
     "CreateRepairUpdateTask": {
       "Type": "Task",
       "Comment": "Create recurring Repair Update task (re-creates every 5 business days).",
@@ -81,7 +78,6 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "CheckExcessRequired"
     },
-
     "CheckExcessRequired": {
       "Type": "Choice",
       "Comment": "Check if excess collection is required.",
@@ -94,7 +90,6 @@
       ],
       "Default": "WaitForScopeActions"
     },
-
     "CreateSendExcessTask": {
       "Type": "Task",
       "Comment": "Create Send Excess task (only if excess required).",
@@ -123,29 +118,36 @@
       "ResultPath": "$.sendExcessTask",
       "Next": "WaitForScopeAndExcessActions"
     },
-
     "WaitForScopeActions": {
-      "Type": "WaitForEvent",
-      "Comment": "No excess required — wait for scope workflow only.",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Send Scope / Contract" },
-          "Next": "OnScopeSent"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "workflowPhase", "value": "awaiting_scope" },
-          "Next": "OnScopeSent"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Repair Update" },
-          "Next": "OnRepairUpdateCompleted_PreScope"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Send Scope / Contract"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "workflowPhase",
+              "value": "awaiting_scope"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Repair Update"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForScopeActions__Route",
+      "Comment": "No excess required — wait for scope workflow only."
     },
-
     "OnRepairUpdateCompleted_PreScope": {
       "Type": "Task",
       "Comment": "Repair Update completed. Create next one due in 5 business days.",
@@ -175,29 +177,35 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "WaitForScopeActions"
     },
-
     "WaitForScopeAndExcessActions": {
-      "Type": "WaitForEvent",
-      "Comment": "Both scope and excess tracks need to complete. Wait for scope-related events.",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Send Scope / Contract" },
-          "Next": "OnScopeSentWithExcess"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Send Excess" },
-          "Next": "OnExcessSent"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Repair Update" },
-          "Next": "OnRepairUpdateCompleted_PreScopeExcess"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Send Scope / Contract"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Send Excess"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Repair Update"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForScopeAndExcessActions__Route",
+      "Comment": "Both scope and excess tracks need to complete. Wait for scope-related events."
     },
-
     "OnRepairUpdateCompleted_PreScopeExcess": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -226,7 +234,6 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "WaitForScopeAndExcessActions"
     },
-
     "OnScopeSent": {
       "Type": "Task",
       "Comment": "Scope sent (no excess track). Update Scope Sent Date, create Signed Scope task.",
@@ -245,7 +252,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateSignedScopeTask"
     },
-
     "CreateSignedScopeTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -273,23 +279,28 @@
       "ResultPath": "$.signedScopeTask",
       "Next": "WaitForScopeSigned"
     },
-
     "WaitForScopeSigned": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Signed Scope / Contract" },
-          "Next": "OnScopeSignedNoExcess"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "scopeSignedDate" },
-          "Next": "OnScopeSignedNoExcess"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Signed Scope / Contract"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "scopeSignedDate"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForScopeSigned__Route"
     },
-
     "OnScopeSignedNoExcess": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -307,7 +318,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "GateReadyToSchedule"
     },
-
     "OnScopeSentWithExcess": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -325,7 +335,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateSignedScopeTaskWithExcess"
     },
-
     "CreateSignedScopeTaskWithExcess": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -353,7 +362,6 @@
       "ResultPath": "$.signedScopeTask",
       "Next": "WaitForScopeAndExcessCompletion"
     },
-
     "OnExcessSent": {
       "Type": "Task",
       "Comment": "Excess invoice sent. Set Excess Sent Date, create Collect Excess task.",
@@ -372,7 +380,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateCollectExcessTask"
     },
-
     "CreateCollectExcessTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -400,34 +407,41 @@
       "ResultPath": "$.collectExcessTask",
       "Next": "WaitForScopeAndExcessCompletion"
     },
-
     "WaitForScopeAndExcessCompletion": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for both scope signed AND excess collected before scheduling.",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Signed Scope / Contract" },
-          "Next": "MarkScopeSigned"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Collect Excess" },
-          "Next": "MarkExcessCollected"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "scopeSignedDate" },
-          "Next": "MarkScopeSigned"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "excessPaymentCollected" },
-          "Next": "MarkExcessCollected"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Signed Scope / Contract"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Collect Excess"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "scopeSignedDate"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "excessPaymentCollected"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForScopeAndExcessCompletion__Route",
+      "Comment": "Wait for both scope signed AND excess collected before scheduling."
     },
-
     "MarkScopeSigned": {
       "Type": "Pass",
       "Parameters": {
@@ -437,7 +451,6 @@
       "ResultPath": "$.gate",
       "Next": "CheckGateReady"
     },
-
     "MarkExcessCollected": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -456,7 +469,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "MarkExcessCollectedGate"
     },
-
     "MarkExcessCollectedGate": {
       "Type": "Pass",
       "Parameters": {
@@ -466,22 +478,26 @@
       "ResultPath": "$.gate",
       "Next": "CheckGateReady"
     },
-
     "CheckGateReady": {
       "Type": "Choice",
       "Comment": "Both scope signed and excess collected? If yes, proceed to scheduling.",
       "Choices": [
         {
           "And": [
-            { "Variable": "$.gate.scopeSigned", "BooleanEquals": true },
-            { "Variable": "$.gate.excessCollected", "BooleanEquals": true }
+            {
+              "Variable": "$.gate.scopeSigned",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.gate.excessCollected",
+              "BooleanEquals": true
+            }
           ],
           "Next": "GateReadyToSchedule"
         }
       ],
       "Default": "WaitForScopeAndExcessCompletion"
     },
-
     "GateReadyToSchedule": {
       "Type": "Task",
       "Comment": "Both prerequisites met. Create Schedule Repairs task.",
@@ -510,24 +526,29 @@
       "ResultPath": "$.scheduleRepairsTask",
       "Next": "WaitForRepairsScheduled"
     },
-
     "WaitForRepairsScheduled": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for Estimated Start + Completion Dates to be set.",
-      "EventPatterns": [
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "estimatedDatesSet" },
-          "Next": "OnRepairsScheduled"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Repair Update" },
-          "Next": "OnRepairUpdateSchedulePhase"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "estimatedDatesSet"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Repair Update"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForRepairsScheduled__Route",
+      "Comment": "Wait for Estimated Start + Completion Dates to be set."
     },
-
     "OnRepairUpdateSchedulePhase": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -556,7 +577,6 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "WaitForRepairsScheduled"
     },
-
     "OnRepairsScheduled": {
       "Type": "Task",
       "Comment": "Repairs scheduled. Set Works Scheduled Date, status -> Scheduled, create Commence Repairs task.",
@@ -577,7 +597,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateCommenceRepairsTask"
     },
-
     "CreateCommenceRepairsTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -605,28 +624,35 @@
       "ResultPath": "$.commenceRepairsTask",
       "Next": "WaitForRepairsCommenced"
     },
-
     "WaitForRepairsCommenced": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Commence Repairs" },
-          "Next": "OnRepairsCommenced"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "workflowPhase", "value": "repairs_in_progress" },
-          "Next": "OnRepairsCommenced"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Repair Update" },
-          "Next": "OnRepairUpdateRepairPhase"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Commence Repairs"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "workflowPhase",
+              "value": "repairs_in_progress"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Repair Update"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForRepairsCommenced__Route"
     },
-
     "OnRepairUpdateRepairPhase": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -655,7 +681,6 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "WaitForRepairsCommenced"
     },
-
     "OnRepairsCommenced": {
       "Type": "Task",
       "Comment": "Repairs commenced. Set Works Commencement Date, create Upload Completion Certificate task.",
@@ -674,7 +699,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateUploadCertificateTask"
     },
-
     "CreateUploadCertificateTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -702,28 +726,35 @@
       "ResultPath": "$.uploadCertTask",
       "Next": "WaitForRepairsComplete"
     },
-
     "WaitForRepairsComplete": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "workflowPhase", "value": "repairs_complete" },
-          "Next": "OnRepairsComplete"
-        },
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Repair Update" },
-          "Next": "OnRepairUpdateDuringRepairs"
-        },
-        {
-          "eventType": "quote.published",
-          "filter": { "quoteType": "variation" },
-          "Next": "OnVariationSubmitted"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "workflowPhase",
+              "value": "repairs_complete"
+            }
+          },
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Repair Update"
+            }
+          },
+          {
+            "eventType": "quote.published",
+            "filter": {
+              "quoteType": "variation"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForRepairsComplete__Route"
     },
-
     "OnRepairUpdateDuringRepairs": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -752,24 +783,29 @@
       "ResultPath": "$.repairUpdateTask",
       "Next": "WaitForRepairsComplete"
     },
-
     "OnVariationSubmitted": {
-      "Type": "WaitForEvent",
-      "Comment": "Variation quote published. Wait for approval then return to repair phase.",
-      "EventPatterns": [
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Approved" },
-          "Next": "WaitForRepairsComplete"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Declined" },
-          "Next": "WaitForRepairsComplete"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Approved"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Declined"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "OnVariationSubmitted__Route",
+      "Comment": "Variation quote published. Wait for approval then return to repair phase."
     },
-
     "OnRepairsComplete": {
       "Type": "Task",
       "Comment": "Repairs complete. Set Works Completion Date.",
@@ -788,24 +824,29 @@
       "ResultPath": "$.jobUpdate",
       "Next": "WaitForCompletionCertificate"
     },
-
     "WaitForCompletionCertificate": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for completion certificate upload or verbal confirmation.",
-      "EventPatterns": [
-        {
-          "eventType": "document.uploaded",
-          "filter": { "documentType": "Completion Certificate" },
-          "Next": "OnCertificateUploaded"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "dateCustomerConfirmedCompletion" },
-          "Next": "OnVerbalConfirmation"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "document.uploaded",
+            "filter": {
+              "documentType": "Completion Certificate"
+            }
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "dateCustomerConfirmedCompletion"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForCompletionCertificate__Route",
+      "Comment": "Wait for completion certificate upload or verbal confirmation."
     },
-
     "OnCertificateUploaded": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -823,7 +864,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "WaitForPOCompletion"
     },
-
     "OnVerbalConfirmation": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -840,39 +880,48 @@
       "ResultPath": "$.jobUpdate",
       "Next": "WaitForPOCompletion"
     },
-
     "WaitForPOCompletion": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for PO to be fully invoiced and completed.",
-      "EventPatterns": [
-        {
-          "eventType": "purchase_order.completed",
-          "Next": "MarkJobComplete"
-        },
-        {
-          "eventType": "quote.published",
-          "filter": { "quoteType": "variation" },
-          "Next": "OnLateVariation"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "purchase_order.completed"
+          },
+          {
+            "eventType": "quote.published",
+            "filter": {
+              "quoteType": "variation"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForPOCompletion__Route",
+      "Comment": "Wait for PO to be fully invoiced and completed."
     },
-
     "OnLateVariation": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Approved" },
-          "Next": "WaitForPOCompletion"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Declined" },
-          "Next": "WaitForPOCompletion"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Approved"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Declined"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "OnLateVariation__Route"
     },
-
     "MarkJobComplete": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -880,17 +929,463 @@
         "params": {
           "id.$": "$.jobId",
           "data": {
-            "customData": { "workflowPhase": "complete" }
+            "customData": {
+              "workflowPhase": "complete"
+            }
           }
         }
       },
       "ResultPath": "$.jobUpdate",
       "Next": "JobComplete"
     },
-
     "JobComplete": {
       "Type": "Succeed",
       "Comment": "Builder Works job workflow completed."
+    },
+    "WaitForScopeActions__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForScopeActions",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Send Scope / Contract"
+            }
+          ],
+          "Next": "OnScopeSent"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "workflowPhase"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "StringEquals": "awaiting_scope"
+            }
+          ],
+          "Next": "OnScopeSent"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Repair Update"
+            }
+          ],
+          "Next": "OnRepairUpdateCompleted_PreScope"
+        }
+      ],
+      "Default": "WaitForScopeActions"
+    },
+    "WaitForScopeAndExcessActions__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForScopeAndExcessActions",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Send Scope / Contract"
+            }
+          ],
+          "Next": "OnScopeSentWithExcess"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Send Excess"
+            }
+          ],
+          "Next": "OnExcessSent"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Repair Update"
+            }
+          ],
+          "Next": "OnRepairUpdateCompleted_PreScopeExcess"
+        }
+      ],
+      "Default": "WaitForScopeAndExcessActions"
+    },
+    "WaitForScopeSigned__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForScopeSigned",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Signed Scope / Contract"
+            }
+          ],
+          "Next": "OnScopeSignedNoExcess"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "scopeSignedDate"
+            }
+          ],
+          "Next": "OnScopeSignedNoExcess"
+        }
+      ],
+      "Default": "WaitForScopeSigned"
+    },
+    "WaitForScopeAndExcessCompletion__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForScopeAndExcessCompletion",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Signed Scope / Contract"
+            }
+          ],
+          "Next": "MarkScopeSigned"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Collect Excess"
+            }
+          ],
+          "Next": "MarkExcessCollected"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "scopeSignedDate"
+            }
+          ],
+          "Next": "MarkScopeSigned"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "excessPaymentCollected"
+            }
+          ],
+          "Next": "MarkExcessCollected"
+        }
+      ],
+      "Default": "WaitForScopeAndExcessCompletion"
+    },
+    "WaitForRepairsScheduled__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForRepairsScheduled",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "estimatedDatesSet"
+            }
+          ],
+          "Next": "OnRepairsScheduled"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Repair Update"
+            }
+          ],
+          "Next": "OnRepairUpdateSchedulePhase"
+        }
+      ],
+      "Default": "WaitForRepairsScheduled"
+    },
+    "WaitForRepairsCommenced__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForRepairsCommenced",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Commence Repairs"
+            }
+          ],
+          "Next": "OnRepairsCommenced"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "workflowPhase"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "StringEquals": "repairs_in_progress"
+            }
+          ],
+          "Next": "OnRepairsCommenced"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Repair Update"
+            }
+          ],
+          "Next": "OnRepairUpdateRepairPhase"
+        }
+      ],
+      "Default": "WaitForRepairsCommenced"
+    },
+    "WaitForRepairsComplete__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForRepairsComplete",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "workflowPhase"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "StringEquals": "repairs_complete"
+            }
+          ],
+          "Next": "OnRepairsComplete"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Repair Update"
+            }
+          ],
+          "Next": "OnRepairUpdateDuringRepairs"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.published"
+            },
+            {
+              "Variable": "$.event.payload.quoteType",
+              "StringEquals": "variation"
+            }
+          ],
+          "Next": "OnVariationSubmitted"
+        }
+      ],
+      "Default": "WaitForRepairsComplete"
+    },
+    "OnVariationSubmitted__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for OnVariationSubmitted",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Approved"
+            }
+          ],
+          "Next": "WaitForRepairsComplete"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Declined"
+            }
+          ],
+          "Next": "WaitForRepairsComplete"
+        }
+      ],
+      "Default": "OnVariationSubmitted"
+    },
+    "WaitForCompletionCertificate__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForCompletionCertificate",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "document.uploaded"
+            },
+            {
+              "Variable": "$.event.payload.documentType",
+              "StringEquals": "Completion Certificate"
+            }
+          ],
+          "Next": "OnCertificateUploaded"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "dateCustomerConfirmedCompletion"
+            }
+          ],
+          "Next": "OnVerbalConfirmation"
+        }
+      ],
+      "Default": "WaitForCompletionCertificate"
+    },
+    "WaitForPOCompletion__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForPOCompletion",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "purchase_order.completed",
+          "Next": "MarkJobComplete"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.published"
+            },
+            {
+              "Variable": "$.event.payload.quoteType",
+              "StringEquals": "variation"
+            }
+          ],
+          "Next": "OnLateVariation"
+        }
+      ],
+      "Default": "WaitForPOCompletion"
+    },
+    "OnLateVariation__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for OnLateVariation",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Approved"
+            }
+          ],
+          "Next": "WaitForPOCompletion"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Declined"
+            }
+          ],
+          "Next": "WaitForPOCompletion"
+        }
+      ],
+      "Default": "OnLateVariation"
     }
   }
 }

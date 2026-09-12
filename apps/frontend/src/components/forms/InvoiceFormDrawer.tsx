@@ -5,7 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { ChevronRight, Loader2, Receipt } from 'lucide-react';
+import {
+  Building2,
+  ChevronRight,
+  Loader2,
+  Receipt,
+  Shield,
+  User,
+  Users,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,11 +25,20 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
+import {
+  JobContactsPicker,
+  contactFromCreated,
+  contactTypeRefMatches,
+  type JobContactRef,
+} from '@/components/forms/JobContactsPicker';
+import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
 import { isArchivedStatus } from '@/components/shared/archive-list';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { formatAddress, formatCurrency } from '@/components/shared/detail';
 import { jobDisplayName, type JobOption } from '@/components/shared/job-label';
 import { createInvoiceAction } from '@/app/(app)/mutations';
+import { fetchContactsAction } from '@/app/(app)/contacts/actions';
+import { fetchContactTypeLookupsAction } from '@/app/(app)/mutations';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
 import {
   fetchWorkOrderByIdAction,
@@ -51,7 +68,8 @@ import {
   workOrderHeaderTotal,
 } from '@/components/invoices/invoice-line-progress';
 import type { ApiGroup } from '@/components/line-items';
-import type { Invoice, Job, WorkOrder } from '@/types/api';
+import { resolveJobKindCaps } from '@/lib/job-kind-registry';
+import type { Contact, Invoice, Job, WorkOrder } from '@/types/api';
 
 const invoiceFormSchema = z.object({
   workOrderId: z.string().min(1, 'Work order is required'),
@@ -63,15 +81,45 @@ const invoiceFormSchema = z.object({
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
-type WizardStep = 'details' | 'allocation' | 'lines' | 'confirm';
+type WizardStep = 'details' | 'recipient' | 'allocation' | 'lines' | 'confirm';
 type AllocationMethod = 'flatAmount' | 'flatPercent' | 'perLine';
+type InvoiceRecipientType = 'insurer' | 'insured' | 'other';
 
 const STEP_LABELS: Record<WizardStep, string> = {
   details: 'Details',
+  recipient: 'Recipient',
   allocation: 'Amount & allocation',
   lines: 'Line amounts',
   confirm: 'Confirm',
 };
+
+function isInsuredContactType(params: {
+  contact: Contact;
+  insuredTypeIds: Set<string>;
+}): boolean {
+  const { contact, insuredTypeIds } = params;
+  if (contact.typeLookupId && insuredTypeIds.has(contact.typeLookupId)) return true;
+  if (contact.typeLookupIds?.some((id) => insuredTypeIds.has(id))) return true;
+  return (contact.contactTypes ?? []).some((t) => {
+    const name = (t.name ?? '').trim().toLowerCase();
+    return (
+      name === 'insured' ||
+      name === 'customer' ||
+      contactTypeRefMatches(t.externalReference, 'contact-type-insured')
+    );
+  });
+}
+
+function contactToRef(contact: Contact): JobContactRef {
+  return {
+    key: `existing-${contact.id}`,
+    contactId: contact.id,
+    firstName: contact.firstName?.trim() || contact.email || 'Contact',
+    lastName: contact.lastName?.trim() || undefined,
+    email: contact.email?.trim() || undefined,
+    mobilePhone: contact.mobilePhone?.trim() || undefined,
+  };
+}
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -164,6 +212,14 @@ export function InvoiceFormDrawer({
   const [pickedJob, setPickedJob] = useState<Job | null>(null);
   const [jobWorkOrders, setJobWorkOrders] = useState<WorkOrder[]>([]);
   const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
+  const [recipientType, setRecipientType] =
+    useState<InvoiceRecipientType>('insured');
+  const [insuredContact, setInsuredContact] = useState<JobContactRef | null>(
+    null,
+  );
+  const [otherContacts, setOtherContacts] = useState<JobContactRef[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
 
   const effectiveJobId = pickedJobId || job?.id || '';
 
@@ -238,9 +294,9 @@ export function InvoiceFormDrawer({
 
   const visibleSteps = useMemo((): WizardStep[] => {
     if (allocationMethod === 'perLine') {
-      return ['details', 'allocation', 'lines', 'confirm'];
+      return ['details', 'recipient', 'allocation', 'lines', 'confirm'];
     }
-    return ['details', 'allocation', 'confirm'];
+    return ['details', 'recipient', 'allocation', 'confirm'];
   }, [allocationMethod]);
 
   const stepIndex = Math.max(0, visibleSteps.indexOf(step));
@@ -257,6 +313,34 @@ export function InvoiceFormDrawer({
     return job ?? null;
   }, [resolvedJob, pickedJob, job, jobById, selectedWo]);
 
+  const jobCaps = useMemo(
+    () =>
+      resolveJobKindCaps({
+        provider: contextJob?.provider,
+        jobType: contextJob?.jobType,
+      }),
+    [contextJob?.provider, contextJob?.jobType],
+  );
+  const insurerAvailable = jobCaps.publishMode === 'external';
+
+  const selectedRecipientContact =
+    recipientType === 'insured'
+      ? insuredContact
+      : recipientType === 'other'
+        ? otherContacts[0] ?? null
+        : null;
+
+  const recipientLabel =
+    recipientType === 'insurer'
+      ? 'Insurer (Crunchwork)'
+      : recipientType === 'insured'
+        ? insuredContact
+          ? `Insured — ${[insuredContact.firstName, insuredContact.lastName].filter(Boolean).join(' ')}${insuredContact.email ? ` <${insuredContact.email}>` : ''}`
+          : 'Insured (no contact)'
+        : otherContacts[0]
+          ? `Other — ${[otherContacts[0].firstName, otherContacts[0].lastName].filter(Boolean).join(' ')}${otherContacts[0].email ? ` <${otherContacts[0].email}>` : ''}`
+          : 'Other (select contact)';
+
   const resetWizard = useCallback(() => {
     setStep('details');
     setAllocationMethod('flatAmount');
@@ -271,6 +355,11 @@ export function InvoiceFormDrawer({
     setPickedJobId('');
     setPickedJob(null);
     setJobWorkOrders([]);
+    setRecipientType('insured');
+    setInsuredContact(null);
+    setOtherContacts([]);
+    setContactsLoading(false);
+    setContactDrawerOpen(false);
     resetPhase();
     form.reset({
       workOrderId: defaultWorkOrderId ?? '',
@@ -324,6 +413,62 @@ export function InvoiceFormDrawer({
       cancelled = true;
     };
   }, [open, effectiveJobId]);
+
+  useEffect(() => {
+    if (!open || !effectiveJobId) {
+      setInsuredContact(null);
+      return;
+    }
+    let cancelled = false;
+    setContactsLoading(true);
+    void (async () => {
+      try {
+        const [types, contactsRes] = await Promise.all([
+          fetchContactTypeLookupsAction(),
+          fetchContactsAction({ jobId: effectiveJobId, limit: 100 }),
+        ]);
+        if (cancelled) return;
+        const insuredTypeIds = new Set(
+          types
+            .filter((t) => {
+              const name = (t.name ?? '').trim().toLowerCase();
+              return (
+                name === 'insured' ||
+                name === 'customer' ||
+                contactTypeRefMatches(t.externalReference, 'contact-type-insured')
+              );
+            })
+            .map((t) => t.id),
+        );
+        const contacts = contactsRes?.data ?? [];
+        const insured =
+          contacts.find(
+            (c) =>
+              isInsuredContactType({ contact: c, insuredTypeIds }) &&
+              !!c.email?.trim(),
+          ) ??
+          contacts.find((c) =>
+            isInsuredContactType({ contact: c, insuredTypeIds }),
+          ) ??
+          null;
+        setInsuredContact(insured ? contactToRef(insured) : null);
+      } catch (err) {
+        console.error('[frontend:InvoiceFormDrawer.loadInsuredContact]', err);
+        if (!cancelled) setInsuredContact(null);
+      } finally {
+        if (!cancelled) setContactsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, effectiveJobId]);
+
+  useEffect(() => {
+    if (!insurerAvailable && recipientType === 'insurer') {
+      setRecipientType('insured');
+    }
+  }, [insurerAvailable, recipientType]);
 
   function handleJobPicked(next: Job) {
     setPickedJobId(next.id);
@@ -515,6 +660,36 @@ export function InvoiceFormDrawer({
         setError('Nothing remaining to invoice on this work order');
         return;
       }
+      setStep('recipient');
+      return;
+    }
+
+    if (step === 'recipient') {
+      if (recipientType === 'insurer' && !insurerAvailable) {
+        setError('Insurer delivery is only available for Crunchwork jobs');
+        return;
+      }
+      if (recipientType === 'insured') {
+        if (!insuredContact?.contactId) {
+          setError('No insured/customer contact found on this job');
+          return;
+        }
+        if (!insuredContact.email?.trim()) {
+          setError('Insured contact must have an email address');
+          return;
+        }
+      }
+      if (recipientType === 'other') {
+        const other = otherContacts[0];
+        if (!other?.contactId) {
+          setError('Select a contact for Other recipient');
+          return;
+        }
+        if (!other.email?.trim()) {
+          setError('Selected contact must have an email address');
+          return;
+        }
+      }
       setStep('allocation');
       return;
     }
@@ -606,6 +781,10 @@ export function InvoiceFormDrawer({
       return;
     }
     if (step === 'allocation') {
+      setStep('recipient');
+      return;
+    }
+    if (step === 'recipient') {
       setStep('details');
     }
   }
@@ -647,6 +826,10 @@ export function InvoiceFormDrawer({
           : undefined,
         note: values.note || undefined,
         invoicedAmounts,
+        recipientType,
+        ...(recipientType !== 'insurer' && selectedRecipientContact?.contactId
+          ? { recipientContactId: selectedRecipientContact.contactId }
+          : {}),
       });
       if (result.success) {
         resetPhase();
@@ -688,7 +871,10 @@ export function InvoiceFormDrawer({
     <>
       <BottomFormDrawer
         open={open}
-        onOpenChange={onOpenChange}
+        onOpenChange={(next) => {
+          if (!next && contactDrawerOpen) return;
+          onOpenChange(next);
+        }}
         title="Create Invoice"
         description={STEP_LABELS[step]}
         icon={<Receipt className="h-5 w-5" />}
@@ -866,6 +1052,110 @@ export function InvoiceFormDrawer({
                     />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {step === 'recipient' && (
+              <div className="space-y-5">
+                <p className="text-sm text-muted-foreground">
+                  Choose who this invoice will be delivered to when you publish.
+                </p>
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    disabled={!insurerAvailable}
+                    onClick={() => insurerAvailable && setRecipientType('insurer')}
+                    className={`flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                      recipientType === 'insurer'
+                        ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
+                        : insurerAvailable
+                          ? 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          : 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-60'
+                    }`}
+                  >
+                    <Shield className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900">Insurer</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Push the invoice to Crunchwork via their API.
+                      </p>
+                      {!insurerAvailable && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Available only for Crunchwork / external jobs.
+                        </p>
+                      )}
+                    </div>
+                    <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRecipientType('insured')}
+                    className={`flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                      recipientType === 'insured'
+                        ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <User className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900">Insured</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Generate a Word/PDF invoice and email the insured contact.
+                      </p>
+                      {contactsLoading ? (
+                        <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Loading insured contact…
+                        </p>
+                      ) : insuredContact ? (
+                        <p className="mt-2 text-xs text-slate-700">
+                          {[insuredContact.firstName, insuredContact.lastName]
+                            .filter(Boolean)
+                            .join(' ')}
+                          {insuredContact.email
+                            ? ` · ${insuredContact.email}`
+                            : ' · No email'}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-xs text-amber-700">
+                          No Customer/Insured contact found on this job.
+                        </p>
+                      )}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRecipientType('other')}
+                    className={`flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                      recipientType === 'other'
+                        ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Users className="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900">Other</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Generate a Word/PDF invoice and email a contact you select.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {recipientType === 'other' && (
+                  <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                    <JobContactsPicker
+                      contacts={otherContacts}
+                      onAdd={(c) => setOtherContacts([c])}
+                      onRemove={() => setOtherContacts([])}
+                      onNewContact={() => setContactDrawerOpen(true)}
+                      description="Select one contact to receive this invoice. They must have an email address."
+                      newContactLabel="New contact"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1116,6 +1406,10 @@ export function InvoiceFormDrawer({
                       <dd className="font-medium text-slate-900">{address}</dd>
                     </div>
                     <div>
+                      <dt className="text-xs text-slate-500">Recipient</dt>
+                      <dd className="font-medium text-slate-900">{recipientLabel}</dd>
+                    </div>
+                    <div>
                       <dt className="text-xs text-slate-500">Invoice total</dt>
                       <dd className="font-semibold text-slate-900">
                         {formatCurrency(invoiceAmount)}
@@ -1212,6 +1506,14 @@ export function InvoiceFormDrawer({
         </div>
       </BottomFormDrawer>
       <CreateSubmitOverlay phase={phase} entityLabel="invoice" />
+      <ContactFormDrawer
+        open={contactDrawerOpen}
+        onOpenChange={setContactDrawerOpen}
+        onSuccess={(contact) => {
+          setOtherContacts([contactFromCreated(contact)]);
+          setContactDrawerOpen(false);
+        }}
+      />
     </>
   );
 }

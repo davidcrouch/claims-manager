@@ -114,6 +114,11 @@ export async function updateInvoiceAction(
     return { success: true, invoice };
   } catch (err) {
     console.error('[updateInvoiceAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
     return { success: false, error: err instanceof Error ? err.message : 'Failed to update invoice' };
   }
 }

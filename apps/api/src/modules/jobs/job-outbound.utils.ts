@@ -138,7 +138,12 @@ export function buildCrunchworkJobCreateBody(params: {
   return body;
 }
 
-export const CRUNCHWORK_JOB_DATE_FIELDS = ['bookedDate', 'attendanceDate'] as const;
+export const CRUNCHWORK_JOB_DATE_FIELDS = [
+  'bookedDate',
+  'attendanceDate',
+  'estimatedStartDate',
+  'estimatedCompletionDate',
+] as const;
 
 export type CrunchworkJobDateField = (typeof CRUNCHWORK_JOB_DATE_FIELDS)[number];
 
@@ -157,7 +162,7 @@ export function toCrunchworkDate(value: unknown): string | null {
 }
 
 /**
- * Read booked/attendance dates from an outbound job payload.
+ * Read booked/attendance/estimated schedule dates from an outbound job payload.
  * Local edits live on customData; some inbound CW payloads also set them top-level.
  */
 export function pickCrunchworkJobDates(
@@ -173,7 +178,7 @@ export function pickCrunchworkJobDates(
 }
 
 /**
- * Overlay booked/attendance onto CW customData (preserving existing CW keys).
+ * Overlay job schedule dates onto CW customData (preserving existing CW keys).
  * Local-only customData keys are not forwarded.
  */
 export function applyCrunchworkJobDates(

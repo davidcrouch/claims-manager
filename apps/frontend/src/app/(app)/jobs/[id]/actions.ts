@@ -209,6 +209,8 @@ export async function updateJobDatesAction(
     customerContactDate?: string | null;
     bookedDate?: string | null;
     attendanceDate?: string | null;
+    estimatedStartDate?: string | null;
+    estimatedCompletionDate?: string | null;
     assignedToUserId?: string | null;
   },
 ): Promise<{ success: boolean; error?: string }> {
@@ -219,6 +221,8 @@ export type UpdateJobFieldsInput = {
   customerContactDate?: string | null;
   bookedDate?: string | null;
   attendanceDate?: string | null;
+  estimatedStartDate?: string | null;
+  estimatedCompletionDate?: string | null;
   assignedToUserId?: string | null;
   statusLookupId?: string | null;
   statusExternalReference?: string | null;
@@ -254,10 +258,16 @@ export async function updateJobFieldsAction(
     const datePatch: Record<string, unknown> = {};
     if (fields.bookedDate !== undefined) datePatch.bookedDate = fields.bookedDate;
     if (fields.attendanceDate !== undefined) datePatch.attendanceDate = fields.attendanceDate;
+    if (fields.estimatedStartDate !== undefined) {
+      datePatch.estimatedStartDate = fields.estimatedStartDate;
+    }
+    if (fields.estimatedCompletionDate !== undefined) {
+      datePatch.estimatedCompletionDate = fields.estimatedCompletionDate;
+    }
     if (Object.keys(datePatch).length > 0) {
       body.customData = { ...existingCustom, ...datePatch };
       console.info(
-        '[jobs/[id]/actions updateJobFieldsAction] including bookedDate/attendanceDate in customData',
+        '[jobs/[id]/actions updateJobFieldsAction] including job dates in customData',
       );
     }
 

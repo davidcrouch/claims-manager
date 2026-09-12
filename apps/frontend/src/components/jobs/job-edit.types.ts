@@ -13,6 +13,8 @@ export type JobOverviewDraft = {
   customerContactDate: string;
   bookedDate: string;
   attendanceDate: string;
+  estimatedStartDate: string;
+  estimatedCompletionDate: string;
   statusLookupId: string;
   statusExternalReference: string;
   jobInstructions: string;
@@ -24,6 +26,8 @@ export type JobEditPending = {
   customerContactDate?: string | null;
   bookedDate?: string | null;
   attendanceDate?: string | null;
+  estimatedStartDate?: string | null;
+  estimatedCompletionDate?: string | null;
   assignedToUserId?: string | null;
   /** Crunchwork-updatable overview fields */
   statusLookupId?: string | null;

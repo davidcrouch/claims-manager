@@ -19,6 +19,7 @@ import {
 import { TenantContext } from '../../tenant/tenant-context';
 import { FinanceService } from '../finance/finance.service';
 import { ScheduleService } from '../schedule/schedule.service';
+import type { TaskAction } from '../tasks/task-action.types';
 import {
   ESTIMATE_PUBLISH_STATUS_NAMES,
   PROPOSAL_REVIEW_STATUS_NAMES,
@@ -77,6 +78,7 @@ export interface DashboardInboxItem {
   dueAt?: string | null;
   href: string;
   jobId?: string | null;
+  action?: TaskAction | null;
 }
 
 export interface DashboardActiveJobItem {
@@ -614,6 +616,9 @@ export class DashboardService {
     task: TaskRow,
     jobById: Map<string, JobNumberSource>,
   ): DashboardInboxItem {
+    const payload = (task.taskPayload ?? {}) as Record<string, unknown>;
+    const rawAction = payload.action as TaskAction | undefined;
+    const action = rawAction?.actionKey ? rawAction : null;
     return {
       id: task.id,
       entityType: 'task',
@@ -621,8 +626,9 @@ export class DashboardService {
       subtitle: jobSubtitle(jobById.get(task.jobId ?? '')),
       status: task.priority ?? task.status ?? undefined,
       dueAt: task.dueDate ? new Date(task.dueDate).toISOString() : null,
-      href: '/tasks?status=Open&overdue=true',
+      href: `/tasks?open=${task.id}`,
       jobId: task.jobId,
+      action,
     };
   }
 

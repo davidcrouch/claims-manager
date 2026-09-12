@@ -1259,10 +1259,21 @@
   Small list and layout fixes keep admin users, catalog, and line-item displays consistent.
   Outcome: clearer document defaults and reliable progress billing to the connected system.
 
-- `2026-09-11` `PENDING` **0.5 h**
+- `2026-09-11` `2aba5a9` **0.5 h**
   `1 file | +3 −3 | Tier 2 standard | Light orchestration`
   Lay summary: Build checks pass again after a small type fix so the document and invoice updates can deploy.
   **Type-check fix so the release can deploy.**
   Corrected status-filter Set typing on the users list.
   Frontend production build type-check completes cleanly.
   Outcome: automated checks can proceed to image build and staging deploy.
+
+- `2026-09-13` `1acda4f` **4 h**
+  `56 files | +5704 −1046 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Invoices can be addressed and emailed to recipients, tasks display action buttons, and workflow definitions now use standard formats.
+  **Invoice recipient management, task actions, and workflow compliance.**
+  Invoices support configurable recipients and an email-send workflow with tracking.
+  The publish wizard walks users through recipient selection, preview, and delivery.
+  Tasks display context-aware action buttons driven by workflow metadata.
+  Workflow definitions converted from a proprietary wait format to standard ASL-compatible states.
+  Crunchwork outbound adapter restructured with improved error handling and test coverage.
+  Invoice issue tracking module added for flagging and resolving billing discrepancies.

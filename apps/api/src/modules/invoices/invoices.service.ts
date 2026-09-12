@@ -7,6 +7,7 @@ import {
   JobsRepository,
   InvoicePaymentsRepository,
   UsersRepository,
+  ContactsRepository,
   type InvoiceInsert,
   type InvoiceViewRow,
   type InvoicePaymentRow,
@@ -30,6 +31,7 @@ import {
   buildCrunchworkVendorTaxInvoiceCreateBody,
   computeProgressInvoiceMoney,
   crunchworkInvoiceGroupsFromPayload,
+  mergeInvoicedAmountMaps,
   preferExistingAmount,
   shouldUseCrunchworkProgressInvoice,
   sumLocalGroupsInclusiveTotal,
@@ -45,6 +47,15 @@ const INVOICE_STATUS = {
   PAID: 'Paid',
 } as const;
 
+export type InvoiceRecipientType = 'insurer' | 'insured' | 'other';
+
+function parseRecipientType(raw: unknown): InvoiceRecipientType | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase();
+  if (v === 'insurer' || v === 'insured' || v === 'other') return v;
+  return null;
+}
+
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger('InvoicesService');
@@ -57,6 +68,7 @@ export class InvoicesService {
     private readonly jobsRepo: JobsRepository,
     private readonly lookupsRepo: LookupsRepository,
     private readonly usersRepo: UsersRepository,
+    private readonly contactsRepo: ContactsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly lookupResolver: LookupResolver,
@@ -195,7 +207,11 @@ export class InvoicesService {
       invoiceId: params.id,
       tenantId,
     });
-    return this.shapeInvoice(row, payments);
+    const recipientContact = await this.loadRecipientContact({
+      tenantId,
+      contactId: row.recipientContactId,
+    });
+    return this.shapeInvoice(row, payments, recipientContact);
   }
 
   async findByPurchaseOrder(params: { purchaseOrderId: string }) {
@@ -216,8 +232,25 @@ export class InvoicesService {
     return rows.map((row) => this.shapeInvoice(row));
   }
 
-  private shapeInvoice(row: InvoiceViewRow, payments: InvoicePaymentRow[] = []) {
+  private shapeInvoice(
+    row: InvoiceViewRow,
+    payments: InvoicePaymentRow[] = [],
+    recipientContact?: {
+      id: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+    } | null,
+  ) {
     const { statusName, statusExternalReference, ...rest } = row;
+    const contactName = recipientContact
+      ? [recipientContact.firstName, recipientContact.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() ||
+        recipientContact.email ||
+        null
+      : null;
     return {
       ...rest,
       status: row.statusLookupId
@@ -228,6 +261,13 @@ export class InvoicesService {
           }
         : undefined,
       payments: payments.map((payment) => this.shapePayment(payment)),
+      recipientContact: recipientContact
+        ? {
+            id: recipientContact.id,
+            name: contactName,
+            email: recipientContact.email ?? null,
+          }
+        : null,
     };
   }
 
@@ -250,6 +290,17 @@ export class InvoicesService {
     };
   }
 
+  private async loadRecipientContact(params: {
+    tenantId: string;
+    contactId?: string | null;
+  }) {
+    if (!params.contactId) return null;
+    return this.contactsRepo.findOne({
+      id: params.contactId,
+      tenantId: params.tenantId,
+    });
+  }
+
   private async loadShaped(params: { id: string; tenantId: string }) {
     const row = await this.invoicesRepo.findOne({
       id: params.id,
@@ -260,7 +311,11 @@ export class InvoicesService {
       invoiceId: params.id,
       tenantId: params.tenantId,
     });
-    return this.shapeInvoice(row, payments);
+    const recipientContact = await this.loadRecipientContact({
+      tenantId: params.tenantId,
+      contactId: row.recipientContactId,
+    });
+    return this.shapeInvoice(row, payments, recipientContact);
   }
 
   private invoiceStatusName(row: {
@@ -477,6 +532,49 @@ export class InvoicesService {
         }
       }
 
+      const recipientType = parseRecipientType(body.recipientType);
+      if (!recipientType) {
+        throw new BadRequestException(
+          'recipientType is required (insurer, insured, or other)',
+        );
+      }
+
+      const recipientContactIdRaw =
+        typeof body.recipientContactId === 'string' && body.recipientContactId
+          ? body.recipientContactId
+          : null;
+
+      if (recipientType === 'insurer') {
+        const job = await this.resolveInvoiceJob({
+          tenantId,
+          jobId: jobId ?? null,
+          workOrderId: workOrderId ?? null,
+        });
+        if (!this.isExternalJob(job)) {
+          throw new BadRequestException(
+            'Insurer recipient is only available for Crunchwork / external jobs',
+          );
+        }
+      } else {
+        if (!recipientContactIdRaw) {
+          throw new BadRequestException(
+            'recipientContactId is required for insured and other recipients',
+          );
+        }
+        const contact = await this.contactsRepo.findOne({
+          id: recipientContactIdRaw,
+          tenantId,
+        });
+        if (!contact) {
+          throw new BadRequestException('Recipient contact not found');
+        }
+        if (!contact.email?.trim()) {
+          throw new BadRequestException(
+            'Recipient contact must have an email address',
+          );
+        }
+      }
+
       const insertData: InvoiceInsert = {
         tenantId,
         workOrderId: workOrderId ?? null,
@@ -489,6 +587,9 @@ export class InvoicesService {
         comments: typeof body.note === 'string' ? body.note : null,
         totalAmount: totalAmount ?? null,
         statusLookupId: draftStatusId ?? null,
+        recipientType,
+        recipientContactId:
+          recipientType === 'insurer' ? null : recipientContactIdRaw,
         invoicePayload: {
           workOrderId,
           purchaseOrderId,
@@ -799,8 +900,53 @@ export class InvoicesService {
   }
 
   /**
+   * Local-only publish (Reviewed → Invoiced) used by insured/other email delivery.
+   * Does not enqueue Crunchwork outbound sync.
+   */
+  async publishLocal(params: { id: string; userId?: string }) {
+    const logPrefix = 'InvoicesService.publishLocal';
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.invoicesRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const currentStatus = this.invoiceStatusName(existing);
+    const statusLower = currentStatus.toLowerCase();
+    if (statusLower === INVOICE_STATUS.INVOICED.toLowerCase()) {
+      return this.loadShaped({ id: params.id, tenantId });
+    }
+    if (statusLower !== INVOICE_STATUS.REVIEWED.toLowerCase()) {
+      throw new BadRequestException(
+        'Invoice must be in Reviewed status before publishing',
+      );
+    }
+
+    const invoicedStatusId = await this.resolveStatusLookupId({
+      tenantId,
+      name: INVOICE_STATUS.INVOICED,
+    });
+    if (!invoicedStatusId) {
+      throw new BadRequestException('Could not resolve Invoiced invoice status');
+    }
+
+    this.logger.log(
+      `${logPrefix} — email-path local publish invoice=${params.id} Reviewed → Invoiced`,
+    );
+    await this.invoicesRepo.update({
+      id: params.id,
+      data: {
+        statusLookupId: invoicedStatusId,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
+    });
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
    * Publish a reviewed invoice. Internal jobs lock locally (Invoiced).
    * External jobs enqueue outbound sync to the provider (e.g. Crunchwork).
+   * Insured/other recipients must use the email send-request path.
    */
   async publish(params: { id: string; userId?: string }) {
     const logPrefix = 'InvoicesService.publish';
@@ -808,6 +954,14 @@ export class InvoicesService {
     const existing = await this.invoicesRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
       throw new BadRequestException('Invoice not found');
+    }
+
+    const recipientType = parseRecipientType(existing.recipientType);
+
+    if (recipientType === 'insured' || recipientType === 'other') {
+      throw new BadRequestException(
+        'This invoice is set for email delivery. Use the email publish flow instead of insurer submit.',
+      );
     }
 
     const currentStatus = this.invoiceStatusName(existing);
@@ -839,6 +993,14 @@ export class InvoicesService {
       jobId: existing.jobId,
       workOrderId: existing.workOrderId,
     });
+
+    if (recipientType === 'insurer' && !this.isExternalJob(job)) {
+      throw new BadRequestException(
+        'Cannot publish to insurer: job is not linked to an external provider',
+      );
+    }
+
+    // Local lock when no external job, or legacy invoices without recipientType on internal jobs
     if (!this.isExternalJob(job)) {
       this.logger.log(
         `${logPrefix} — internal publish invoice=${params.id} Reviewed → Invoiced`,
@@ -853,6 +1015,7 @@ export class InvoicesService {
       return this.loadShaped({ id: params.id, tenantId });
     }
 
+    // External / insurer path (also legacy external invoices without recipientType)
     const providerPurchaseOrderId = await this.resolveProviderPurchaseOrderId({
       tenantId,
       workOrderId: existing.workOrderId,
@@ -899,7 +1062,7 @@ export class InvoicesService {
 
     const payloadInvoiced = (existing.invoicePayload as Record<string, unknown> | null)
       ?.invoicedAmounts;
-    const invoicedAmounts =
+    const currentInvoicedAmounts =
       payloadInvoiced &&
       typeof payloadInvoiced === 'object' &&
       !Array.isArray(payloadInvoiced)
@@ -916,8 +1079,7 @@ export class InvoicesService {
       priorPayload.cwInvoiceKind === 'progress' || priorPayload.cwInvoiceKind === 'vendorTax'
         ? (priorPayload.cwInvoiceKind as CrunchworkInvoiceKind)
         : undefined;
-    // Only trust a stored kind after a successful CW publish. A failed attempt
-    // may have stamped vendorTax and would otherwise lock retries onto /invoices.
+    // Only trust a stored kind after a successful CW publish.
     const lockedKind = existing.sourceExternalReference ? storedKind : undefined;
 
     const invoiceTotal = Number(existing.totalAmount ?? 0);
@@ -938,16 +1100,25 @@ export class InvoicesService {
       purchaseOrderId: existing.purchaseOrderId,
     });
 
-    const detectedProgress = shouldUseCrunchworkProgressInvoice({
-      invoiceTotal,
-      billableTotal,
-      hasPriorPublishedSibling,
-    });
-    const cwInvoiceKind: CrunchworkInvoiceKind =
-      lockedKind ?? (detectedProgress ? 'progress' : 'vendorTax');
+    // Staging IAG: Partial Invoicing off + /progress-invoices 403. Always push
+    // via vendor-tax create/update; 2nd+ claims update the linked CW invoice
+    // with cumulative line amounts from all published siblings.
+    const cwInvoiceKind: CrunchworkInvoiceKind = 'vendorTax';
+    const invoicedAmounts =
+      (await this.resolveCumulativeInvoicedAmounts({
+        tenantId,
+        invoiceId: params.id,
+        purchaseOrderId: existing.purchaseOrderId,
+        current: currentInvoicedAmounts,
+      })) ?? currentInvoicedAmounts;
 
     const progressMoney =
-      cwInvoiceKind === 'progress'
+      hasPriorPublishedSibling ||
+      shouldUseCrunchworkProgressInvoice({
+        invoiceTotal,
+        billableTotal,
+        hasPriorPublishedSibling,
+      })
         ? computeProgressInvoiceMoney({
             groups: localGroups,
             invoicedAmounts,
@@ -958,7 +1129,8 @@ export class InvoicesService {
     this.logger.log(
       `${logPrefix} — publishing invoice=${params.id} via outbox connectionId=${connectionId} ` +
         `purchaseOrderId=${providerPurchaseOrderId} cwInvoiceKind=${cwInvoiceKind}` +
-        (lockedKind ? ` lockedKind=${lockedKind}` : ` detectedProgress=${detectedProgress}`) +
+        (lockedKind ? ` lockedKind=${lockedKind}` : '') +
+        (hasPriorPublishedSibling ? ' hasPriorPublishedSibling=true' : '') +
         (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : '') +
         ` billableTotal=${billableTotal} invoiceTotal=${invoiceTotal}` +
         (progressMoney
@@ -1000,15 +1172,14 @@ export class InvoicesService {
           reusedCwInvoiceId,
           invoiceId: params.id,
           cwInvoiceKind,
-          ...(cwInvoiceKind === 'vendorTax'
+          localGroups,
+          ...(invoicedAmounts ? { invoicedAmounts } : {}),
+          ...(progressMoney
             ? {
-                localGroups,
-                ...(invoicedAmounts ? { invoicedAmounts } : {}),
+                total: progressMoney.total,
+                totalTax: progressMoney.totalTax,
               }
-            : {
-                total: progressMoney!.total,
-                totalTax: progressMoney!.totalTax,
-              }),
+            : {}),
           vendorInvoiceNumber: existing.invoiceNumber ?? existing.internalNumber ?? null,
           issueDate: existing.issueDate
             ? new Date(existing.issueDate as string | Date).toISOString()
@@ -1059,6 +1230,12 @@ export class InvoicesService {
     });
   }
 
+  /**
+   * Prefer this invoice's CW id. If none, adopt a sibling's CW id on the same PO.
+   * Staging IAG has Partial Invoicing disabled (only one vendor-tax invoice per PO)
+   * and POST /progress-invoices returns 403, so 2nd+ local invoices must update
+   * the linked CW invoice rather than create another.
+   */
   private async resolveExistingCrunchworkInvoiceId(params: {
     tenantId: string;
     invoice: {
@@ -1067,12 +1244,52 @@ export class InvoicesService {
       sourceExternalReference?: string | null;
     };
   }): Promise<string | undefined> {
-    // Only reuse this invoice's own CW id (retries / re-publish). Never adopt a
-    // sibling's id — that overwrote progress claims onto one vendor-tax invoice.
     if (params.invoice.sourceExternalReference) {
       return params.invoice.sourceExternalReference;
     }
+    if (!params.invoice.purchaseOrderId) return undefined;
+
+    const siblings = await this.invoicesRepo.findByPurchaseOrder({
+      purchaseOrderId: params.invoice.purchaseOrderId,
+      tenantId: params.tenantId,
+    });
+    for (const row of siblings) {
+      if (row.id === params.invoice.id) continue;
+      const cwId = row.sourceExternalReference?.trim();
+      if (cwId) return cwId;
+    }
     return undefined;
+  }
+
+  /** Sum invoicedAmounts across published siblings + this invoice (same PO). */
+  private async resolveCumulativeInvoicedAmounts(params: {
+    tenantId: string;
+    invoiceId: string;
+    purchaseOrderId?: string | null;
+    current?: Record<string, number>;
+  }): Promise<Record<string, number> | undefined> {
+    const maps: Array<Record<string, number> | undefined> = [params.current];
+    if (params.purchaseOrderId) {
+      const siblings = await this.invoicesRepo.findByPurchaseOrder({
+        purchaseOrderId: params.purchaseOrderId,
+        tenantId: params.tenantId,
+      });
+      for (const row of siblings) {
+        if (row.id === params.invoiceId) continue;
+        if (!row.sourceExternalReference) continue;
+        const payload =
+          row.invoicePayload &&
+          typeof row.invoicePayload === 'object' &&
+          !Array.isArray(row.invoicePayload)
+            ? (row.invoicePayload as Record<string, unknown>)
+            : null;
+        const amounts = payload?.invoicedAmounts;
+        if (amounts && typeof amounts === 'object' && !Array.isArray(amounts)) {
+          maps.push(amounts as Record<string, number>);
+        }
+      }
+    }
+    return mergeInvoicedAmountMaps(maps);
   }
 
   /**
@@ -1202,6 +1419,60 @@ export class InvoicesService {
     if (typeof params.body.issueDate === 'string' && params.body.issueDate) {
       data.issueDate = new Date(params.body.issueDate);
     }
+
+    const nextRecipientType = parseRecipientType(params.body.recipientType);
+    if (nextRecipientType) {
+      const statusName = this.invoiceStatusName({
+        statusName: (existing as { status?: { name?: string } }).status?.name,
+        sourceExternalReference: existing.sourceExternalReference,
+      });
+      const editable =
+        statusName.toLowerCase() === INVOICE_STATUS.DRAFT.toLowerCase() ||
+        statusName.toLowerCase() === INVOICE_STATUS.REVIEWED.toLowerCase();
+      if (!editable) {
+        throw new BadRequestException(
+          'Recipient can only be changed while the invoice is Draft or Reviewed',
+        );
+      }
+      data.recipientType = nextRecipientType;
+      if (nextRecipientType === 'insurer') {
+        const job = await this.resolveInvoiceJob({
+          tenantId: this.tenantContext.getTenantId(),
+          jobId: existing.jobId,
+          workOrderId: existing.workOrderId,
+        });
+        if (!this.isExternalJob(job)) {
+          throw new BadRequestException(
+            'Insurer recipient is only available for Crunchwork / external jobs',
+          );
+        }
+        data.recipientContactId = null;
+      } else if (
+        typeof params.body.recipientContactId === 'string' &&
+        params.body.recipientContactId
+      ) {
+        const contact = await this.contactsRepo.findOne({
+          id: params.body.recipientContactId,
+          tenantId: this.tenantContext.getTenantId(),
+        });
+        if (!contact?.email?.trim()) {
+          throw new BadRequestException(
+            'Recipient contact must have an email address',
+          );
+        }
+        data.recipientContactId = params.body.recipientContactId;
+      } else {
+        throw new BadRequestException(
+          'recipientContactId is required for insured and other recipients',
+        );
+      }
+    } else if (
+      typeof params.body.recipientContactId === 'string' &&
+      params.body.recipientContactId
+    ) {
+      data.recipientContactId = params.body.recipientContactId;
+    }
+
     if (
       params.body.invoicePayload &&
       typeof params.body.invoicePayload === 'object' &&

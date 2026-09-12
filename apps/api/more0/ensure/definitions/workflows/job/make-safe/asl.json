@@ -2,7 +2,6 @@
   "Comment": "Builder Make Safe job lifecycle: Allocated -> Contact -> Schedule -> Attend -> Submit Quote -> Review -> PO -> Invoice -> Complete (with cancellation path)",
   "StartAt": "SetupMakeSafeJob",
   "States": {
-
     "SetupMakeSafeJob": {
       "Type": "Pass",
       "Comment": "Initialize context. Claim Recommendation defaults to Accept for make-safe.",
@@ -16,7 +15,6 @@
       },
       "Next": "SetDefaultClaimRecommendation"
     },
-
     "SetDefaultClaimRecommendation": {
       "Type": "Task",
       "Comment": "Set Claim Recommendation to Accept on the job and populate Request Date.",
@@ -36,7 +34,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateCallToScheduleTask"
     },
-
     "CreateCallToScheduleTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -64,32 +61,38 @@
       "ResultPath": "$.callToScheduleTask",
       "Next": "WaitForContactOrSchedule"
     },
-
     "WaitForContactOrSchedule": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Call to Schedule" },
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "eventType": "task.failed",
-          "filter": { "taskName": "Call to Schedule" },
-          "Next": "OnCallToScheduleFailed"
-        },
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "makeSafeRequired", "value": false },
-          "Next": "CancelMakeSafe"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Call to Schedule"
+            }
+          },
+          {
+            "eventType": "task.failed",
+            "filter": {
+              "taskName": "Call to Schedule"
+            }
+          },
+          {
+            "eventType": "appointment.scheduled"
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "makeSafeRequired",
+              "value": false
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForContactOrSchedule__Route"
     },
-
     "OnCallToScheduleFailed": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -117,27 +120,32 @@
       "ResultPath": "$.callToSchedule2Task",
       "Next": "WaitForContactOrScheduleRetry"
     },
-
     "WaitForContactOrScheduleRetry": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Call to Schedule #2" },
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "makeSafeRequired", "value": false },
-          "Next": "CancelMakeSafe"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Call to Schedule #2"
+            }
+          },
+          {
+            "eventType": "appointment.scheduled"
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "makeSafeRequired",
+              "value": false
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForContactOrScheduleRetry__Route"
     },
-
     "CancelMakeSafe": {
       "Type": "Task",
       "Comment": "Make Safe Required set to No — cancel the job.",
@@ -155,12 +163,10 @@
       "ResultPath": "$.jobUpdate",
       "Next": "MakeSafeCancelled"
     },
-
     "MakeSafeCancelled": {
       "Type": "Succeed",
       "Comment": "Make Safe job cancelled."
     },
-
     "OnAppointmentScheduledEarly": {
       "Type": "Task",
       "Comment": "Appointment scheduled before Call to Schedule was completed. Update job dates first.",
@@ -181,7 +187,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CompleteCallToScheduleTask"
     },
-
     "CompleteCallToScheduleTask": {
       "Type": "Task",
       "Comment": "Close the Call to Schedule task with a link to the appointment.",
@@ -198,14 +203,15 @@
       "ResultPath": "$.taskCloseResult",
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.taskCloseError",
           "Next": "CalculateSubmissionDueDate"
         }
       ],
       "Next": "CalculateSubmissionDueDate"
     },
-
     "OnCustomerContacted": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -223,7 +229,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CalculateAttendanceDueDate"
     },
-
     "CalculateAttendanceDueDate": {
       "Type": "Task",
       "Comment": "Compute attendanceDueDate from contactDate (5 business days SLA).",
@@ -237,7 +242,6 @@
       "ResultPath": "$.calculatedDates",
       "Next": "WriteAttendanceDueDate"
     },
-
     "WriteAttendanceDueDate": {
       "Type": "Task",
       "Comment": "Persist the computed attendanceDueDate to the job.",
@@ -255,7 +259,6 @@
       "ResultPath": "$.dateUpdate",
       "Next": "CreateBookSiteAttendanceTask"
     },
-
     "CreateBookSiteAttendanceTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -283,22 +286,26 @@
       "ResultPath": "$.bookSiteTask",
       "Next": "WaitForAppointmentScheduled"
     },
-
     "WaitForAppointmentScheduled": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduled"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "makeSafeRequired", "value": false },
-          "Next": "CancelMakeSafe"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "appointment.scheduled"
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "makeSafeRequired",
+              "value": false
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForAppointmentScheduled__Route"
     },
-
     "OnAppointmentScheduled": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -317,7 +324,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CalculateSubmissionDueDate"
     },
-
     "CalculateSubmissionDueDate": {
       "Type": "Task",
       "Comment": "Compute submissionDueDate from attendanceDate (10 business days SLA).",
@@ -331,7 +337,6 @@
       "ResultPath": "$.calculatedDates",
       "Next": "WriteSubmissionDueDate"
     },
-
     "WriteSubmissionDueDate": {
       "Type": "Task",
       "Comment": "Persist the computed submissionDueDate to the job.",
@@ -349,22 +354,26 @@
       "ResultPath": "$.dateUpdate",
       "Next": "WaitForAttendanceDatePassed"
     },
-
     "WaitForAttendanceDatePassed": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "attendance_date_passed",
-          "Next": "OnAttendanceDatePassed"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "makeSafeRequired", "value": false },
-          "Next": "CancelMakeSafe"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "attendance_date_passed"
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "makeSafeRequired",
+              "value": false
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForAttendanceDatePassed__Route"
     },
-
     "OnAttendanceDatePassed": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -381,7 +390,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateSubmissionRequiredTask"
     },
-
     "CreateSubmissionRequiredTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -409,17 +417,19 @@
       "ResultPath": "$.submissionTask",
       "Next": "WaitForQuotePublished"
     },
-
     "WaitForQuotePublished": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "quote.published",
-          "Next": "OnQuotePublished"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.published"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuotePublished__Route"
     },
-
     "OnQuotePublished": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -436,23 +446,33 @@
       "ResultPath": "$.jobUpdate",
       "Next": "EvaluateAutoApproval"
     },
-
     "EvaluateAutoApproval": {
       "Type": "Choice",
       "Choices": [
         {
           "And": [
-            { "Variable": "$.claimRecommendation", "StringEquals": "Accept" },
-            { "Variable": "$.event.payload.autoApprovalApplies", "BooleanEquals": true },
-            { "Variable": "$.event.payload.claimDecision", "StringEquals": "Accept" },
-            { "Variable": "$.event.payload.withinDelegateAuthority", "BooleanEquals": true }
+            {
+              "Variable": "$.claimRecommendation",
+              "StringEquals": "Accept"
+            },
+            {
+              "Variable": "$.event.payload.autoApprovalApplies",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.event.payload.claimDecision",
+              "StringEquals": "Accept"
+            },
+            {
+              "Variable": "$.event.payload.withinDelegateAuthority",
+              "BooleanEquals": true
+            }
           ],
           "Next": "AutoApproveAndCreatePO"
         }
       ],
       "Default": "WaitForQuoteOutcome"
     },
-
     "AutoApproveAndCreatePO": {
       "Type": "Task",
       "Resource": "tool.claims.approve_quote",
@@ -464,33 +484,40 @@
       "ResultPath": "$.approveResult",
       "Next": "WaitForCompletionAndInvoice"
     },
-
     "WaitForQuoteOutcome": {
-      "Type": "WaitForEvent",
-      "EventPatterns": [
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Approved" },
-          "Next": "WaitForCompletionAndInvoice"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Resubmission Required" },
-          "Next": "OnResubmissionRequired"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Declined" },
-          "Next": "JobFinalOutcome"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Cancelled" },
-          "Next": "JobFinalOutcome"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Approved"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Resubmission Required"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Declined"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Cancelled"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuoteOutcome__Route"
     },
-
     "OnResubmissionRequired": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -498,14 +525,15 @@
         "params": {
           "id.$": "$.jobId",
           "data": {
-            "customData": { "workflowPhase": "awaiting_resubmission" }
+            "customData": {
+              "workflowPhase": "awaiting_resubmission"
+            }
           }
         }
       },
       "ResultPath": "$.jobUpdate",
       "Next": "CreateResubmissionTask"
     },
-
     "CreateResubmissionTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -534,40 +562,49 @@
       "ResultPath": "$.resubmissionTask",
       "Next": "WaitForQuotePublished"
     },
-
     "WaitForCompletionAndInvoice": {
-      "Type": "WaitForEvent",
-      "Comment": "Quote approved and PO created. Wait for completion date recording, variations, and invoice.",
-      "EventPatterns": [
-        {
-          "eventType": "purchase_order.completed",
-          "Next": "CheckJobCompletion"
-        },
-        {
-          "eventType": "quote.published",
-          "filter": { "quoteType": "variation" },
-          "Next": "WaitForVariationOutcome"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "purchase_order.completed"
+          },
+          {
+            "eventType": "quote.published",
+            "filter": {
+              "quoteType": "variation"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForCompletionAndInvoice__Route",
+      "Comment": "Quote approved and PO created. Wait for completion date recording, variations, and invoice."
     },
-
     "WaitForVariationOutcome": {
-      "Type": "WaitForEvent",
-      "Comment": "Variation submitted — wait for approval, then return to invoice wait.",
-      "EventPatterns": [
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Approved" },
-          "Next": "WaitForCompletionAndInvoice"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Declined" },
-          "Next": "WaitForCompletionAndInvoice"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Approved"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Declined"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForVariationOutcome__Route",
+      "Comment": "Variation submitted — wait for approval, then return to invoice wait."
     },
-
     "CheckJobCompletion": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -575,14 +612,15 @@
         "params": {
           "id.$": "$.jobId",
           "data": {
-            "customData": { "workflowPhase": "complete" }
+            "customData": {
+              "workflowPhase": "complete"
+            }
           }
         }
       },
       "ResultPath": "$.jobUpdate",
       "Next": "JobComplete"
     },
-
     "JobFinalOutcome": {
       "Type": "Task",
       "Resource": "tool.claims.update_job",
@@ -600,10 +638,293 @@
       "ResultPath": "$.jobUpdate",
       "Next": "JobComplete"
     },
-
     "JobComplete": {
       "Type": "Succeed",
       "Comment": "Builder Make Safe job workflow completed."
+    },
+    "WaitForContactOrSchedule__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForContactOrSchedule",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule"
+            }
+          ],
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.failed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule"
+            }
+          ],
+          "Next": "OnCallToScheduleFailed"
+        },
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "makeSafeRequired"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "CancelMakeSafe"
+        }
+      ],
+      "Default": "WaitForContactOrSchedule"
+    },
+    "WaitForContactOrScheduleRetry__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForContactOrScheduleRetry",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule #2"
+            }
+          ],
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "makeSafeRequired"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "CancelMakeSafe"
+        }
+      ],
+      "Default": "WaitForContactOrScheduleRetry"
+    },
+    "WaitForAppointmentScheduled__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForAppointmentScheduled",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduled"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "makeSafeRequired"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "CancelMakeSafe"
+        }
+      ],
+      "Default": "WaitForAppointmentScheduled"
+    },
+    "WaitForAttendanceDatePassed__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForAttendanceDatePassed",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "attendance_date_passed",
+          "Next": "OnAttendanceDatePassed"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "makeSafeRequired"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "BooleanEquals": false
+            }
+          ],
+          "Next": "CancelMakeSafe"
+        }
+      ],
+      "Default": "WaitForAttendanceDatePassed"
+    },
+    "WaitForQuotePublished__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForQuotePublished",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "quote.published",
+          "Next": "OnQuotePublished"
+        }
+      ],
+      "Default": "WaitForQuotePublished"
+    },
+    "WaitForQuoteOutcome__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForQuoteOutcome",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Approved"
+            }
+          ],
+          "Next": "WaitForCompletionAndInvoice"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Resubmission Required"
+            }
+          ],
+          "Next": "OnResubmissionRequired"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Declined"
+            }
+          ],
+          "Next": "JobFinalOutcome"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Cancelled"
+            }
+          ],
+          "Next": "JobFinalOutcome"
+        }
+      ],
+      "Default": "WaitForQuoteOutcome"
+    },
+    "WaitForCompletionAndInvoice__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForCompletionAndInvoice",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "purchase_order.completed",
+          "Next": "CheckJobCompletion"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.published"
+            },
+            {
+              "Variable": "$.event.payload.quoteType",
+              "StringEquals": "variation"
+            }
+          ],
+          "Next": "WaitForVariationOutcome"
+        }
+      ],
+      "Default": "WaitForCompletionAndInvoice"
+    },
+    "WaitForVariationOutcome__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForVariationOutcome",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Approved"
+            }
+          ],
+          "Next": "WaitForCompletionAndInvoice"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Declined"
+            }
+          ],
+          "Next": "WaitForCompletionAndInvoice"
+        }
+      ],
+      "Default": "WaitForVariationOutcome"
     }
   }
 }

@@ -119,18 +119,22 @@ describe('job-outbound.utils', () => {
       expect(toCrunchworkDate('2026-08-23')).toBe('2026-08-23T00:00:00.000Z');
     });
 
-    it('reads booked and attendance dates from customData', () => {
+    it('reads booked, attendance, and estimated schedule dates from customData', () => {
       expect(
         pickCrunchworkJobDates({
           customData: {
             bookedDate: '2026-08-23',
             attendanceDate: '2026-08-24',
+            estimatedStartDate: '2026-09-01',
+            estimatedCompletionDate: '2026-09-15',
             workflowPhase: 'scheduled',
           },
         }),
       ).toEqual({
         bookedDate: '2026-08-23T00:00:00.000Z',
         attendanceDate: '2026-08-24T00:00:00.000Z',
+        estimatedStartDate: '2026-09-01T00:00:00.000Z',
+        estimatedCompletionDate: '2026-09-15T00:00:00.000Z',
       });
     });
 
@@ -141,6 +145,8 @@ describe('job-outbound.utils', () => {
           customData: {
             bookedDate: '2026-08-23',
             attendanceDate: '2026-08-24',
+            estimatedStartDate: '2026-09-01',
+            estimatedCompletionDate: '2026-09-15',
             workflowPhase: 'scheduled',
           },
           cwCustomData: { insurerNote: 'keep-me' },
@@ -153,6 +159,8 @@ describe('job-outbound.utils', () => {
           insurerNote: 'keep-me',
           bookedDate: '2026-08-23T00:00:00.000Z',
           attendanceDate: '2026-08-24T00:00:00.000Z',
+          estimatedStartDate: '2026-09-01T00:00:00.000Z',
+          estimatedCompletionDate: '2026-09-15T00:00:00.000Z',
         },
       });
       expect(body.customData).not.toHaveProperty('workflowPhase');

@@ -41,6 +41,8 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'job_type', name: 'New Construction', ref: 'job-type-new-construction', providerCode: 'direct' },
   // Crunchwork job types use CW_JOB_TYPE_LOOKUPS (real BA/MS/BW codes — not seed- refs)
   { domain: 'job_status', name: 'Pending', ref: 'job-status-pending' },
+  { domain: 'job_status', name: 'Awaiting Maintenance', ref: 'job-status-awaiting-maintenance' },
+  { domain: 'job_status', name: 'Awaiting Customer', ref: 'job-status-awaiting-customer' },
   { domain: 'job_status', name: 'Completed', ref: 'job-status-completed' },
   { domain: 'job_status', name: 'Archived', ref: 'job-status-archived' },
   { domain: 'contact_type', name: 'Customer', ref: 'contact-type-insured' },

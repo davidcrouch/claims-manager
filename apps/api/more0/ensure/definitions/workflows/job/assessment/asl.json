@@ -2,7 +2,6 @@
   "Comment": "Builder Assessment job lifecycle: Allocated -> Contact -> Schedule -> Attend -> Submit -> Review -> Invoice -> Complete",
   "StartAt": "SetupJob",
   "States": {
-
     "SetupJob": {
       "Type": "Pass",
       "Comment": "Initialize context with job data and set entityId alias.",
@@ -20,7 +19,6 @@
       },
       "Next": "CheckInboundTaskExists"
     },
-
     "CheckInboundTaskExists": {
       "Type": "Choice",
       "Comment": "If a Call to Schedule task ID was supplied at invocation, skip waiting and bind directly.",
@@ -33,21 +31,33 @@
       ],
       "Default": "WaitForInboundTaskOrCreate"
     },
-
     "WaitForInboundTaskOrCreate": {
-      "Type": "WaitForEvent",
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.created",
+            "filter": {
+              "taskName": "Call to Schedule"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForInboundTaskOrCreate__Route",
       "Comment": "Wait up to 30s for Crunchwork to sync the Call to Schedule task. If timeout, create it ourselves.",
       "TimeoutSeconds": 30,
-      "TimeoutNext": "CreateCallToScheduleTask",
-      "EventPatterns": [
+      "Catch": [
         {
-          "eventType": "task.created",
-          "filter": { "taskName": "Call to Schedule" },
-          "Next": "BindInboundCallToScheduleTaskFromEvent"
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.eventTimeout",
+          "Next": "CreateCallToScheduleTask"
         }
       ]
     },
-
     "BindInboundCallToScheduleTaskFromEvent": {
       "Type": "Pass",
       "Comment": "Bind to the inbound task ID from the task.created event.",
@@ -57,7 +67,6 @@
       "ResultPath": "$.callToScheduleTask",
       "Next": "UpdateJobStatusAllocated"
     },
-
     "BindInboundCallToScheduleTask": {
       "Type": "Pass",
       "Comment": "Use the task ID supplied at invocation.",
@@ -67,7 +76,6 @@
       "ResultPath": "$.callToScheduleTask",
       "Next": "UpdateJobStatusAllocated"
     },
-
     "CreateCallToScheduleTask": {
       "Type": "Task",
       "Comment": "Create the 'Call to Schedule' task on the job.",
@@ -96,7 +104,6 @@
       "ResultPath": "$.callToScheduleTask",
       "Next": "UpdateJobStatusAllocated"
     },
-
     "UpdateJobStatusAllocated": {
       "Type": "Task",
       "Comment": "Set job status to Allocated and populate Request Date.",
@@ -115,28 +122,32 @@
       "ResultPath": "$.jobUpdate",
       "Next": "WaitForContactOrSchedule"
     },
-
     "WaitForContactOrSchedule": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for either Call to Schedule task completion, task failure, or appointment being scheduled directly.",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Call to Schedule" },
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "eventType": "task.failed",
-          "filter": { "taskName": "Call to Schedule" },
-          "Next": "OnCallToScheduleFailed"
-        },
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Call to Schedule"
+            }
+          },
+          {
+            "eventType": "task.failed",
+            "filter": {
+              "taskName": "Call to Schedule"
+            }
+          },
+          {
+            "eventType": "appointment.scheduled"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForContactOrSchedule__Route",
+      "Comment": "Wait for either Call to Schedule task completion, task failure, or appointment being scheduled directly."
     },
-
     "OnCallToScheduleFailed": {
       "Type": "Task",
       "Comment": "Create a follow-up 'Call to Schedule #2' task.",
@@ -165,23 +176,26 @@
       "ResultPath": "$.callToSchedule2Task",
       "Next": "WaitForContactOrScheduleRetry"
     },
-
     "WaitForContactOrScheduleRetry": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for the follow-up call task or direct appointment scheduling.",
-      "EventPatterns": [
-        {
-          "eventType": "task.completed",
-          "filter": { "taskName": "Call to Schedule #2" },
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "task.completed",
+            "filter": {
+              "taskName": "Call to Schedule #2"
+            }
+          },
+          {
+            "eventType": "appointment.scheduled"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForContactOrScheduleRetry__Route",
+      "Comment": "Wait for the follow-up call task or direct appointment scheduling."
     },
-
     "OnAppointmentScheduledEarly": {
       "Type": "Task",
       "Comment": "Appointment scheduled before Call to Schedule was completed. Update job dates first.",
@@ -202,7 +216,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CompleteCallToScheduleTask"
     },
-
     "CompleteCallToScheduleTask": {
       "Type": "Task",
       "Comment": "Close the Call to Schedule task with a link to the appointment.",
@@ -219,14 +232,15 @@
       "ResultPath": "$.taskCloseResult",
       "Catch": [
         {
-          "ErrorEquals": ["States.ALL"],
+          "ErrorEquals": [
+            "States.ALL"
+          ],
           "ResultPath": "$.taskCloseError",
           "Next": "CreateBookSiteTaskAndComplete"
         }
       ],
       "Next": "CreateBookSiteTaskAndComplete"
     },
-
     "CreateBookSiteTaskAndComplete": {
       "Type": "Pass",
       "Comment": "Skip book-site-attendance task creation since appointment already scheduled.",
@@ -237,7 +251,6 @@
       "ResultPath": "$.scheduling",
       "Next": "CalculateSubmissionDueDate"
     },
-
     "OnCustomerContacted": {
       "Type": "Task",
       "Comment": "Customer contacted. Set Contact Date and calculate Attendance Due Date.",
@@ -256,7 +269,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CalculateAttendanceDueDate"
     },
-
     "CalculateAttendanceDueDate": {
       "Type": "Task",
       "Comment": "Call calculate_dates to compute attendanceDueDate from contactDate.",
@@ -270,7 +282,6 @@
       "ResultPath": "$.calculatedDates",
       "Next": "WriteAttendanceDueDate"
     },
-
     "WriteAttendanceDueDate": {
       "Type": "Task",
       "Comment": "Persist the computed attendanceDueDate to the job.",
@@ -288,7 +299,6 @@
       "ResultPath": "$.dateUpdate",
       "Next": "CreateBookSiteAttendanceTask"
     },
-
     "CreateBookSiteAttendanceTask": {
       "Type": "Task",
       "Comment": "Create the 'Book Site Attendance' task.",
@@ -317,18 +327,20 @@
       "ResultPath": "$.bookSiteTask",
       "Next": "WaitForAppointmentScheduled"
     },
-
     "WaitForAppointmentScheduled": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for the site attendance appointment to be scheduled.",
-      "EventPatterns": [
-        {
-          "eventType": "appointment.scheduled",
-          "Next": "OnAppointmentScheduled"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "appointment.scheduled"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForAppointmentScheduled__Route",
+      "Comment": "Wait for the site attendance appointment to be scheduled."
     },
-
     "OnAppointmentScheduled": {
       "Type": "Task",
       "Comment": "Set Booked Date, Attendance Date; update status to Scheduled.",
@@ -348,7 +360,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CalculateSubmissionDueDate"
     },
-
     "CalculateSubmissionDueDate": {
       "Type": "Task",
       "Comment": "Call calculate_dates to compute submissionDueDate from attendanceDate.",
@@ -362,7 +373,6 @@
       "ResultPath": "$.calculatedDates",
       "Next": "WriteSubmissionDueDate"
     },
-
     "WriteSubmissionDueDate": {
       "Type": "Task",
       "Comment": "Persist the computed submissionDueDate to the job.",
@@ -380,23 +390,27 @@
       "ResultPath": "$.dateUpdate",
       "Next": "WaitForAttendanceDatePassed"
     },
-
     "WaitForAttendanceDatePassed": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for the Attendance Date to pass (time-based trigger from scheduler) or a make-safe request.",
-      "EventPatterns": [
-        {
-          "eventType": "attendance_date_passed",
-          "Next": "OnAttendanceDatePassed"
-        },
-        {
-          "eventType": "field.updated",
-          "filter": { "field": "makeSafeRequired", "value": true },
-          "Next": "OnMakeSafeRequired"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "attendance_date_passed"
+          },
+          {
+            "eventType": "field.updated",
+            "filter": {
+              "field": "makeSafeRequired",
+              "value": true
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForAttendanceDatePassed__Route",
+      "Comment": "Wait for the Attendance Date to pass (time-based trigger from scheduler) or a make-safe request."
     },
-
     "OnMakeSafeRequired": {
       "Type": "Task",
       "Comment": "Make Safe identified during inspection. Spawn a Builder Make Safe job.",
@@ -418,7 +432,6 @@
       "ResultPath": "$.makeSafeJob",
       "Next": "WaitForAttendanceDatePassed"
     },
-
     "OnAttendanceDatePassed": {
       "Type": "Task",
       "Comment": "Attendance Date has passed. Update status to Awaiting Submission, create Submission Required task.",
@@ -436,7 +449,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateSubmissionRequiredTask"
     },
-
     "CreateSubmissionRequiredTask": {
       "Type": "Task",
       "Comment": "Create the 'Submission Required' task.",
@@ -465,18 +477,20 @@
       "ResultPath": "$.submissionTask",
       "Next": "WaitForQuotePublished"
     },
-
     "WaitForQuotePublished": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for the assessment quote to be published.",
-      "EventPatterns": [
-        {
-          "eventType": "quote.published",
-          "Next": "OnQuotePublished"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.published"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuotePublished__Route",
+      "Comment": "Wait for the assessment quote to be published."
     },
-
     "OnQuotePublished": {
       "Type": "Task",
       "Comment": "Quote published. Set First/Last Submission Date, status -> Awaiting Review.",
@@ -496,24 +510,34 @@
       "ResultPath": "$.jobUpdate",
       "Next": "EvaluateAutoApproval"
     },
-
     "EvaluateAutoApproval": {
       "Type": "Choice",
       "Comment": "Check if auto-approval criteria are met.",
       "Choices": [
         {
           "And": [
-            { "Variable": "$.event.payload.claimRecommendation", "StringEquals": "Accept" },
-            { "Variable": "$.event.payload.autoApprovalApplies", "BooleanEquals": true },
-            { "Variable": "$.event.payload.claimDecision", "StringEquals": "Accept" },
-            { "Variable": "$.event.payload.withinDelegateAuthority", "BooleanEquals": true }
+            {
+              "Variable": "$.event.payload.claimRecommendation",
+              "StringEquals": "Accept"
+            },
+            {
+              "Variable": "$.event.payload.autoApprovalApplies",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.event.payload.claimDecision",
+              "StringEquals": "Accept"
+            },
+            {
+              "Variable": "$.event.payload.withinDelegateAuthority",
+              "BooleanEquals": true
+            }
           ],
           "Next": "AutoApproveQuote"
         }
       ],
       "Default": "WaitForQuoteOutcome"
     },
-
     "AutoApproveQuote": {
       "Type": "Task",
       "Comment": "Auto-approve the quote.",
@@ -526,7 +550,6 @@
       "ResultPath": "$.approveResult",
       "Next": "SpawnBuilderWorksJob"
     },
-
     "SpawnBuilderWorksJob": {
       "Type": "Task",
       "Comment": "Create a Builder Works job from the approved assessment quote.",
@@ -550,39 +573,47 @@
       "ResultPath": "$.worksJob",
       "Next": "WaitForInvoice"
     },
-
     "WaitForQuoteOutcome": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for insurer to review the quote.",
-      "EventPatterns": [
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Approved" },
-          "Next": "OnQuoteApproved"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Resubmission Required" },
-          "Next": "OnResubmissionRequired"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Cash Settled" },
-          "Next": "OnQuoteFinalOutcome"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Declined" },
-          "Next": "OnQuoteFinalOutcome"
-        },
-        {
-          "eventType": "quote.status_changed",
-          "filter": { "newStatus": "Cancelled" },
-          "Next": "OnQuoteFinalOutcome"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Approved"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Resubmission Required"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Cash Settled"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Declined"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Cancelled"
+            }
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuoteOutcome__Route",
+      "Comment": "Wait for insurer to review the quote."
     },
-
     "OnQuoteApproved": {
       "Type": "Task",
       "Comment": "Quote approved by insurer. Spawn Builder Works job.",
@@ -606,7 +637,6 @@
       "ResultPath": "$.worksJob",
       "Next": "WaitForInvoice"
     },
-
     "OnResubmissionRequired": {
       "Type": "Task",
       "Comment": "Set status to Awaiting Resubmission and create new Submission Required task.",
@@ -624,7 +654,6 @@
       "ResultPath": "$.jobUpdate",
       "Next": "CreateResubmissionTask"
     },
-
     "CreateResubmissionTask": {
       "Type": "Task",
       "Resource": "tool.claims.create_task",
@@ -653,7 +682,6 @@
       "ResultPath": "$.resubmissionTask",
       "Next": "WaitForQuotePublished"
     },
-
     "OnQuoteFinalOutcome": {
       "Type": "Task",
       "Comment": "Quote reached a terminal status (Cash Settled / Declined / Cancelled).",
@@ -672,33 +700,37 @@
       "ResultPath": "$.jobUpdate",
       "Next": "WaitForInvoice"
     },
-
     "WaitForInvoice": {
-      "Type": "WaitForEvent",
-      "Comment": "Wait for invoice submission and PO completion.",
-      "EventPatterns": [
-        {
-          "eventType": "purchase_order.completed",
-          "Next": "CheckJobCompletion"
-        },
-        {
-          "eventType": "invoice.approved",
-          "Next": "WaitForPOCompletion"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "purchase_order.completed"
+          },
+          {
+            "eventType": "invoice.approved"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForInvoice__Route",
+      "Comment": "Wait for invoice submission and PO completion."
     },
-
     "WaitForPOCompletion": {
-      "Type": "WaitForEvent",
-      "Comment": "Invoice approved; wait for PO to reach completed status.",
-      "EventPatterns": [
-        {
-          "eventType": "purchase_order.completed",
-          "Next": "CheckJobCompletion"
-        }
-      ]
+      "Type": "Task",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "purchase_order.completed"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForPOCompletion__Route",
+      "Comment": "Invoice approved; wait for PO to reach completed status."
     },
-
     "CheckJobCompletion": {
       "Type": "Task",
       "Comment": "PO completed. Mark the job as Complete.",
@@ -716,10 +748,246 @@
       "ResultPath": "$.jobUpdate",
       "Next": "JobComplete"
     },
-
     "JobComplete": {
       "Type": "Succeed",
       "Comment": "Builder Assessment job workflow completed."
+    },
+    "WaitForInboundTaskOrCreate__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForInboundTaskOrCreate",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.created"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule"
+            }
+          ],
+          "Next": "BindInboundCallToScheduleTaskFromEvent"
+        }
+      ],
+      "Default": "WaitForInboundTaskOrCreate"
+    },
+    "WaitForContactOrSchedule__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForContactOrSchedule",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule"
+            }
+          ],
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.failed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule"
+            }
+          ],
+          "Next": "OnCallToScheduleFailed"
+        },
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        }
+      ],
+      "Default": "WaitForContactOrSchedule"
+    },
+    "WaitForContactOrScheduleRetry__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForContactOrScheduleRetry",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "task.completed"
+            },
+            {
+              "Variable": "$.event.payload.taskName",
+              "StringEquals": "Call to Schedule #2"
+            }
+          ],
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        }
+      ],
+      "Default": "WaitForContactOrScheduleRetry"
+    },
+    "WaitForAppointmentScheduled__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForAppointmentScheduled",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "appointment.scheduled",
+          "Next": "OnAppointmentScheduled"
+        }
+      ],
+      "Default": "WaitForAppointmentScheduled"
+    },
+    "WaitForAttendanceDatePassed__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForAttendanceDatePassed",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "attendance_date_passed",
+          "Next": "OnAttendanceDatePassed"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "field.updated"
+            },
+            {
+              "Variable": "$.event.payload.field",
+              "StringEquals": "makeSafeRequired"
+            },
+            {
+              "Variable": "$.event.payload.value",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "OnMakeSafeRequired"
+        }
+      ],
+      "Default": "WaitForAttendanceDatePassed"
+    },
+    "WaitForQuotePublished__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForQuotePublished",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "quote.published",
+          "Next": "OnQuotePublished"
+        }
+      ],
+      "Default": "WaitForQuotePublished"
+    },
+    "WaitForQuoteOutcome__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForQuoteOutcome",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Approved"
+            }
+          ],
+          "Next": "OnQuoteApproved"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Resubmission Required"
+            }
+          ],
+          "Next": "OnResubmissionRequired"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Cash Settled"
+            }
+          ],
+          "Next": "OnQuoteFinalOutcome"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Declined"
+            }
+          ],
+          "Next": "OnQuoteFinalOutcome"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Cancelled"
+            }
+          ],
+          "Next": "OnQuoteFinalOutcome"
+        }
+      ],
+      "Default": "WaitForQuoteOutcome"
+    },
+    "WaitForInvoice__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForInvoice",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "purchase_order.completed",
+          "Next": "CheckJobCompletion"
+        },
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "invoice.approved",
+          "Next": "WaitForPOCompletion"
+        }
+      ],
+      "Default": "WaitForInvoice"
+    },
+    "WaitForPOCompletion__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForPOCompletion",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "purchase_order.completed",
+          "Next": "CheckJobCompletion"
+        }
+      ],
+      "Default": "WaitForPOCompletion"
     }
   }
 }

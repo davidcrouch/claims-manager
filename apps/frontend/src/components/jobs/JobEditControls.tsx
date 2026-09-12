@@ -72,11 +72,13 @@ export function EditTextarea({
   onChange,
   disabled,
   rows = 3,
+  className,
 }: {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
   rows?: number;
+  className?: string;
 }) {
   return (
     <Textarea
@@ -84,7 +86,7 @@ export function EditTextarea({
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
       rows={rows}
-      className="min-h-18 w-full text-sm"
+      className={className ?? 'min-h-18 w-full text-sm'}
     />
   );
 }

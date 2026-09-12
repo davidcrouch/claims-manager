@@ -1,14 +1,14 @@
 /**
  * Crunchwork Insurance REST API invoice helpers.
  *
- * Full-amount vendor tax invoices — POST /invoices oneOf:
- *   - CreateVendorTaxInvoiceInput { invoiceType, purchaseOrderId }
- *     clones PO groups/items; then POST /invoices/{id} with completed + pricing.
- *   - CreateInvoiceInput { name, account, invoiceType, groups[] }
+ * Full-amount vendor tax invoices — POST /invoices:
+ *   CreateVendorTaxInvoiceInput { invoiceType, purchaseOrderId }
+ *   then POST /invoices/{id} with completed + pricing (quantity is locked).
  *
- * Partial / progress claims — POST /progress-invoices (CreateTradeInvoiceInput):
+ * Partial / 2nd+ claims — POST /progress-invoices (CreateTradeInvoiceInput):
  *   header totals only ({ purchaseOrderId, invoiceNumber, total, totalTax, … }).
- *   Do not reuse a sibling vendor-tax invoice id for a new progress claim.
+ *   Required when the PO already has a vendor-tax invoice and Partial Invoicing
+ *   is disabled on the CW tenant (second POST /invoices is rejected).
  *
  * InvoiceGroup.subTotal/total/totalTax are response-only on vendor-tax invoices.
  * Do not send header totals on vendor-tax create (not on CreateVendorTaxInvoiceInput).
@@ -60,9 +60,27 @@ export function buildCrunchworkVendorTaxInvoiceCreateBody(params: {
 
 export type CrunchworkInvoiceKind = 'progress' | 'vendorTax';
 
+/** Sum matching keys across invoicedAmounts maps (siblings + current). */
+export function mergeInvoicedAmountMaps(
+  maps: Array<Record<string, number> | null | undefined>,
+): Record<string, number> | undefined {
+  const out: Record<string, number> = {};
+  let any = false;
+  for (const map of maps) {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) continue;
+    for (const [key, raw] of Object.entries(map)) {
+      const n = typeof raw === 'number' ? raw : Number(raw);
+      if (!Number.isFinite(n)) continue;
+      any = true;
+      out[key] = roundCents((out[key] ?? 0) + n);
+    }
+  }
+  return any ? out : undefined;
+}
+
 /**
- * CreateTradeInvoiceInput / UpdateTradeInvoiceInput for POST /progress-invoices.
- * Header-level progress claim (no line groups).
+ * Trade invoice body for POST /progress-invoices (when enabled on the tenant).
+ * Header-level totals only — no line groups.
  */
 export function buildCrunchworkProgressInvoiceBody(params: {
   purchaseOrderId: string;
@@ -274,10 +292,9 @@ export function applyLocalPricingToCrunchworkInvoiceGroups(params: {
  * Apply draft `invoicePayload.invoicedAmounts` onto priced CW groups before
  * update. When the map is present:
  * - amount <= 0 or missing → completed: false
- * - amount > 0 → completed: true; quantity derived from the GST-inclusive
- *   allocated total (matches frontend `lineTotalFromItem`), after stripping
- *   tax and percent/fixed markup so CW does not tax the amount twice
- * - unitCost <= 0 → qty=1 and unitCost set to the ex-GST sell amount
+ * - amount > 0 → completed: true; adjust unitCost (keep PO quantity — CW locks
+ *   quantity on vendor-tax clones) so the line totals the GST-inclusive
+ *   allocated amount after tax/markup
  * When the map is absent, groups are returned unchanged (full-line publish).
  */
 export function applyInvoicedAmountOverridesToGroups(params: {
@@ -299,17 +316,15 @@ export function applyInvoicedAmountOverridesToGroups(params: {
       return;
     }
     item.completed = true;
-    const unitCost = Number(item.unitCost);
-    const exTax = gstExclusiveAmount(allocated, item);
-    const perUnitNet = netUnitAmount(item, Number.isFinite(unitCost) ? unitCost : 0);
-
-    if (Number.isFinite(unitCost) && unitCost > 0 && perUnitNet > 0) {
-      item.quantity = roundMoney(exTax / perUnitNet);
-    } else {
+    const qtyRaw = Number(item.quantity);
+    const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1;
+    if (!(Number.isFinite(qtyRaw) && qtyRaw > 0)) {
       item.quantity = 1;
-      item.unitCost = roundMoney(unitCostFromInclusive(allocated, item));
-      copyUnitCostToBuyCostForCrunchwork(item);
     }
+    // Keep quantity; scale unitCost so qty × net × (1+tax) ≈ allocated.
+    const inclusivePerUnit = allocated / qty;
+    item.unitCost = roundMoney(unitCostFromInclusive(inclusivePerUnit, item));
+    copyUnitCostToBuyCostForCrunchwork(item);
   };
 
   for (const group of groups) {
@@ -331,13 +346,6 @@ function jsonRate(value: unknown): number {
     return coerceToRate(value);
   }
   return coerceToRate(undefined);
-}
-
-/** Strip GST from a GST-inclusive allocated amount (tax may be 10 or 0.10). */
-function gstExclusiveAmount(allocatedInclusive: number, item: JsonObject): number {
-  const taxRate = jsonRate(item.tax);
-  if (taxRate <= 0) return allocatedInclusive;
-  return allocatedInclusive / (1 + taxRate);
 }
 
 /**
@@ -435,11 +443,8 @@ function toInvoiceUpdateCombo(combo: JsonObject): JsonObject | null {
     .filter((item): item is JsonObject => item != null);
   const out: JsonObject = { id: combo.id };
   if (items.length > 0) out.items = items;
-  if (combo.quantity != null && combo.quantity !== '') {
-    const qty = Number(combo.quantity);
-    if (Number.isFinite(qty)) out.quantity = qty;
-  }
-  return items.length > 0 || out.quantity != null ? out : { id: combo.id };
+  // Do not send combo.quantity — CW locks quantities cloned from the PO.
+  return items.length > 0 ? out : { id: combo.id };
 }
 
 function toInvoiceUpdateItem(item: JsonObject): JsonObject | null {
@@ -448,7 +453,8 @@ function toInvoiceUpdateItem(item: JsonObject): JsonObject | null {
     return { id: item.id, completed: false };
   }
   const out: JsonObject = { id: item.id, completed: true };
-  copyNumberIfPresent(item, out, 'quantity');
+  // Do not send quantity — CW locks PO-cloned line quantities
+  // ("quantity on item … is locked and cannot be modified").
   copyNumberIfPresent(item, out, 'unitCost');
   copyUnitCostToBuyCostForCrunchwork(out);
   copyNumberIfPresent(item, out, 'tax');
@@ -504,7 +510,6 @@ function overlayItems(params: {
 }
 
 const PRICING_FIELDS = [
-  'quantity',
   'unitCost',
   'tax',
   'markupType',

@@ -466,6 +466,8 @@ export class JobsService {
     'scope_signed': 'Scope Signed',
     'awaiting_excess': 'Awaiting Excess',
     'excess_collected': 'Excess Collected',
+    'awaiting_maintenance': 'Awaiting Maintenance',
+    'awaiting_customer': 'Awaiting Customer',
     'repairs_in_progress': 'Repairs In Progress',
     'repairs_complete': 'Repairs Complete',
     'certificate_uploaded': 'Repairs Complete',

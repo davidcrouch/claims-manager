@@ -6,6 +6,7 @@ import {
   computeProgressInvoiceMoney,
   crunchworkInvoiceGroupsFromPayload,
   itemInclusiveLineTotal,
+  mergeInvoicedAmountMaps,
   pickCrunchworkInvoiceIdForPurchaseOrder,
   preferExistingAmount,
   shouldUseCrunchworkProgressInvoice,
@@ -57,6 +58,17 @@ describe('buildCrunchworkProgressInvoiceBody', () => {
       total: 165,
       totalTax: 15,
     });
+  });
+});
+
+describe('mergeInvoicedAmountMaps', () => {
+  it('sums matching keys across sibling maps', () => {
+    expect(
+      mergeInvoicedAmountMaps([
+        { 'id:i1': 109.99 },
+        { 'id:i1': 129.99, 'id:i2': 10 },
+      ]),
+    ).toEqual({ 'id:i1': 239.98, 'id:i2': 10 });
   });
 });
 
@@ -171,7 +183,7 @@ describe('sumLocalGroupsInclusiveTotal', () => {
 });
 
 describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
-  it('overlays unit cost/quantity/tax and marks items completed', () => {
+  it('overlays unit cost/tax and marks items completed (keeps CW quantity)', () => {
     const overlaid = applyLocalPricingToCrunchworkInvoiceGroups({
       cwGroups: [
         {
@@ -217,7 +229,7 @@ describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
       completed: true,
       unitCost: 45.5,
       buyCost: 45.5,
-      quantity: 12,
+      quantity: 1,
       tax: 10,
       markupType: 'Percentage',
       markupValue: 19,
@@ -279,7 +291,6 @@ describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
     expect(item.completed).toBe(true);
     expect(item.unitCost).toBe(80);
     expect(item.buyCost).toBe(80);
-    expect(item.quantity).toBe(2);
   });
 
   it('still marks unmatched CW items completed', () => {
@@ -325,7 +336,6 @@ describe('toInvoiceUpdateGroups', () => {
             completed: true,
             unitCost: 45.5,
             buyCost: 45.5,
-            quantity: 12,
             tax: 10,
             unitType: { externalReference: 'M2' },
           },
@@ -411,7 +421,7 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
     ).toEqual(groups);
   });
 
-  it('marks unmatched or zero amounts incomplete and scales quantity for allocated lines', () => {
+  it('marks unmatched or zero amounts incomplete and scales unitCost for allocated lines', () => {
     const result = applyInvoicedAmountOverridesToGroups({
       groups: [
         {
@@ -444,8 +454,8 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
     expect(items[0]).toMatchObject({
       id: 'i1',
       completed: true,
-      unitCost: 50,
-      quantity: 2,
+      unitCost: 10,
+      quantity: 10,
     });
     expect(items[1]).toMatchObject({
       id: 'i2',
@@ -508,9 +518,10 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
     });
     const item = (result[0].items as Record<string, unknown>[])[0];
     expect(item.quantity).toBe(1);
+    expect(item.unitCost).toBe(300);
   });
 
-  it('derives partial progress quantity from GST-inclusive allocation', () => {
+  it('keeps locked quantity and scales unitCost for partial allocation', () => {
     const result = applyInvoicedAmountOverridesToGroups({
       groups: [
         {
@@ -531,11 +542,14 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
       invoicedAmounts: { 'id:i1': 165 },
     });
     const item = (result[0].items as Record<string, unknown>[])[0];
-    expect(item.quantity).toBe(0.5);
+    expect(item.quantity).toBe(1);
+    expect(item.unitCost).toBe(150);
+    expect(item.buyCost).toBe(150);
   });
 
-  it('accounts for percent markup when deriving quantity from inclusive totals', () => {
-    // unitCost 100, markup 10% → 110 ex-GST; +10% tax → 121 inclusive for qty 1
+  it('scales unitCost across quantity without changing locked qty', () => {
+    // Full line: qty 2 × unitCost 100 × 1.1 markup × 1.1 tax = 242 inclusive
+    // Allocate half (121) → keep qty 2, unitCost becomes 50
     const result = applyInvoicedAmountOverridesToGroups({
       groups: [
         {
@@ -555,7 +569,8 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
       invoicedAmounts: { 'id:i1': 121 },
     });
     const item = (result[0].items as Record<string, unknown>[])[0];
-    expect(item.quantity).toBe(1);
+    expect(item.quantity).toBe(2);
+    expect(item.unitCost).toBe(50);
   });
 
   it('sets ex-GST unitCost when allocated without a usable unit cost', () => {
@@ -611,8 +626,9 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
     });
     const update = toInvoiceUpdateGroups(groups);
     expect(update[0].items).toEqual([
-      expect.objectContaining({ id: 'i1', completed: true, quantity: 1, unitCost: 10 }),
+      expect.objectContaining({ id: 'i1', completed: true, unitCost: 10 }),
       { id: 'i2', completed: false },
     ]);
+    expect((update[0].items as Record<string, unknown>[])[0].quantity).toBeUndefined();
   });
 });
