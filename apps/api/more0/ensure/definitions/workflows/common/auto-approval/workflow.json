@@ -1,0 +1,33 @@
+{
+  "name": "workflow.common.auto-approval",
+  "type": "workflow",
+  "displayName": "Quote Auto-Approval Evaluation",
+  "description": "Evaluates whether a published quote meets auto-approval criteria: Claim Recommendation = Accept, Auto-Approval Applies = Yes, Claim Decision = Accept, and quote value within delegated authority limit.",
+  "version": "1.0.0",
+  "methods": {
+    "info": {
+      "description": "Workflow metadata",
+      "semantics": "informational"
+    },
+    "execute": {
+      "description": "Evaluate auto-approval synchronously.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "quoteId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "claimRecommendation": { "type": "string" },
+          "autoApprovalApplies": { "type": "boolean" },
+          "claimDecision": { "type": "string" },
+          "quoteValue": { "type": "number" },
+          "delegateAuthorityLimit": { "type": "number" }
+        },
+        "required": ["quoteId", "jobId"]
+      }
+    }
+  },
+  "implementation": {
+    "kind": "workflow-asl",
+    "entrypoint": "asl.json"
+  }
+}

@@ -1,0 +1,609 @@
+{
+  "Comment": "Builder Make Safe job lifecycle: Allocated -> Contact -> Schedule -> Attend -> Submit Quote -> Review -> PO -> Invoice -> Complete (with cancellation path)",
+  "StartAt": "SetupMakeSafeJob",
+  "States": {
+
+    "SetupMakeSafeJob": {
+      "Type": "Pass",
+      "Comment": "Initialize context. Claim Recommendation defaults to Accept for make-safe.",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "tenantId.$": "$.tenantId",
+        "entityType": "job",
+        "entityId.$": "$.jobId",
+        "phase": "allocated",
+        "claimRecommendation": "Accept"
+      },
+      "Next": "SetDefaultClaimRecommendation"
+    },
+
+    "SetDefaultClaimRecommendation": {
+      "Type": "Task",
+      "Comment": "Set Claim Recommendation to Accept on the job and populate Request Date.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "claimRecommendation": "Accept",
+              "workflowPhase": "allocated",
+              "requestDate.$": "$.requestDate"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateCallToScheduleTask"
+    },
+
+    "CreateCallToScheduleTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Call to Schedule",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_appointment",
+              "label": "Schedule appointment",
+              "context": {
+                "entityType": "Appointment",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.callToScheduleTask",
+      "Next": "WaitForContactOrSchedule"
+    },
+
+    "WaitForContactOrSchedule": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Call to Schedule" },
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "eventType": "task.failed",
+          "filter": { "taskName": "Call to Schedule" },
+          "Next": "OnCallToScheduleFailed"
+        },
+        {
+          "eventType": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "makeSafeRequired", "value": false },
+          "Next": "CancelMakeSafe"
+        }
+      ]
+    },
+
+    "OnCallToScheduleFailed": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Call to Schedule #2",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_appointment",
+              "label": "Schedule appointment",
+              "context": {
+                "entityType": "Appointment",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.callToSchedule2Task",
+      "Next": "WaitForContactOrScheduleRetry"
+    },
+
+    "WaitForContactOrScheduleRetry": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Call to Schedule #2" },
+          "Next": "OnCustomerContacted"
+        },
+        {
+          "eventType": "appointment.scheduled",
+          "Next": "OnAppointmentScheduledEarly"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "makeSafeRequired", "value": false },
+          "Next": "CancelMakeSafe"
+        }
+      ]
+    },
+
+    "CancelMakeSafe": {
+      "Type": "Task",
+      "Comment": "Make Safe Required set to No — cancel the job.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "cancelled"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "MakeSafeCancelled"
+    },
+
+    "MakeSafeCancelled": {
+      "Type": "Succeed",
+      "Comment": "Make Safe job cancelled."
+    },
+
+    "OnAppointmentScheduledEarly": {
+      "Type": "Task",
+      "Comment": "Appointment scheduled before Call to Schedule was completed. Update job dates first.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "contactDate.$": "$.event.payload.scheduledAt",
+              "bookedDate.$": "$.event.payload.scheduledAt",
+              "attendanceDate.$": "$.event.payload.appointmentDate",
+              "workflowPhase": "scheduled"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CompleteCallToScheduleTask"
+    },
+
+    "CompleteCallToScheduleTask": {
+      "Type": "Task",
+      "Comment": "Close the Call to Schedule task with a link to the appointment.",
+      "Resource": "tool.claims.update_task",
+      "Parameters": {
+        "params": {
+          "id.$": "$.callToScheduleTask.id",
+          "data": {
+            "status": "Completed",
+            "relatedAppointmentId.$": "$.event.payload.appointmentId"
+          }
+        }
+      },
+      "ResultPath": "$.taskCloseResult",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.taskCloseError",
+          "Next": "CalculateSubmissionDueDate"
+        }
+      ],
+      "Next": "CalculateSubmissionDueDate"
+    },
+
+    "OnCustomerContacted": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "contactDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "contacted"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CalculateAttendanceDueDate"
+    },
+
+    "CalculateAttendanceDueDate": {
+      "Type": "Task",
+      "Comment": "Compute attendanceDueDate from contactDate (5 business days SLA).",
+      "Resource": "tool.claims.calculate_dates",
+      "Parameters": {
+        "params": {
+          "jobId.$": "$.jobId",
+          "contactDate.$": "$.event.payload.completedAt"
+        }
+      },
+      "ResultPath": "$.calculatedDates",
+      "Next": "WriteAttendanceDueDate"
+    },
+
+    "WriteAttendanceDueDate": {
+      "Type": "Task",
+      "Comment": "Persist the computed attendanceDueDate to the job.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "attendanceDueDate.$": "$.calculatedDates.attendanceDueDate"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.dateUpdate",
+      "Next": "CreateBookSiteAttendanceTask"
+    },
+
+    "CreateBookSiteAttendanceTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Book Site Attendance",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_appointment",
+              "label": "Book site attendance",
+              "context": {
+                "entityType": "Appointment",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.bookSiteTask",
+      "Next": "WaitForAppointmentScheduled"
+    },
+
+    "WaitForAppointmentScheduled": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "appointment.scheduled",
+          "Next": "OnAppointmentScheduled"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "makeSafeRequired", "value": false },
+          "Next": "CancelMakeSafe"
+        }
+      ]
+    },
+
+    "OnAppointmentScheduled": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "bookedDate.$": "$.event.payload.scheduledAt",
+              "attendanceDate.$": "$.event.payload.appointmentDate",
+              "workflowPhase": "scheduled"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CalculateSubmissionDueDate"
+    },
+
+    "CalculateSubmissionDueDate": {
+      "Type": "Task",
+      "Comment": "Compute submissionDueDate from attendanceDate (10 business days SLA).",
+      "Resource": "tool.claims.calculate_dates",
+      "Parameters": {
+        "params": {
+          "jobId.$": "$.jobId",
+          "attendanceDate.$": "$.event.payload.appointmentDate"
+        }
+      },
+      "ResultPath": "$.calculatedDates",
+      "Next": "WriteSubmissionDueDate"
+    },
+
+    "WriteSubmissionDueDate": {
+      "Type": "Task",
+      "Comment": "Persist the computed submissionDueDate to the job.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "submissionDueDate.$": "$.calculatedDates.submissionDueDate"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.dateUpdate",
+      "Next": "WaitForAttendanceDatePassed"
+    },
+
+    "WaitForAttendanceDatePassed": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "attendance_date_passed",
+          "Next": "OnAttendanceDatePassed"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "makeSafeRequired", "value": false },
+          "Next": "CancelMakeSafe"
+        }
+      ]
+    },
+
+    "OnAttendanceDatePassed": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "awaiting_submission"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateSubmissionRequiredTask"
+    },
+
+    "CreateSubmissionRequiredTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Submission Required",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "publish_quote",
+              "label": "Submit estimate",
+              "context": {
+                "entityType": "Quote",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.submissionTask",
+      "Next": "WaitForQuotePublished"
+    },
+
+    "WaitForQuotePublished": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "quote.published",
+          "Next": "OnQuotePublished"
+        }
+      ]
+    },
+
+    "OnQuotePublished": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "awaiting_review"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "EvaluateAutoApproval"
+    },
+
+    "EvaluateAutoApproval": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.claimRecommendation", "StringEquals": "Accept" },
+            { "Variable": "$.event.payload.autoApprovalApplies", "BooleanEquals": true },
+            { "Variable": "$.event.payload.claimDecision", "StringEquals": "Accept" },
+            { "Variable": "$.event.payload.withinDelegateAuthority", "BooleanEquals": true }
+          ],
+          "Next": "AutoApproveAndCreatePO"
+        }
+      ],
+      "Default": "WaitForQuoteOutcome"
+    },
+
+    "AutoApproveAndCreatePO": {
+      "Type": "Task",
+      "Resource": "tool.claims.approve_quote",
+      "Parameters": {
+        "params": {
+          "id.$": "$.event.payload.quoteId"
+        }
+      },
+      "ResultPath": "$.approveResult",
+      "Next": "WaitForCompletionAndInvoice"
+    },
+
+    "WaitForQuoteOutcome": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Approved" },
+          "Next": "WaitForCompletionAndInvoice"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Resubmission Required" },
+          "Next": "OnResubmissionRequired"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Declined" },
+          "Next": "JobFinalOutcome"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Cancelled" },
+          "Next": "JobFinalOutcome"
+        }
+      ]
+    },
+
+    "OnResubmissionRequired": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": { "workflowPhase": "awaiting_resubmission" }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateResubmissionTask"
+    },
+
+    "CreateResubmissionTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Submission Required",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Resubmission required — revise and republish the make safe quote.",
+            "action": {
+              "actionKey": "publish_quote",
+              "label": "Resubmit estimate",
+              "context": {
+                "entityType": "Quote",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.resubmissionTask",
+      "Next": "WaitForQuotePublished"
+    },
+
+    "WaitForCompletionAndInvoice": {
+      "Type": "WaitForEvent",
+      "Comment": "Quote approved and PO created. Wait for completion date recording, variations, and invoice.",
+      "EventPatterns": [
+        {
+          "eventType": "purchase_order.completed",
+          "Next": "CheckJobCompletion"
+        },
+        {
+          "eventType": "quote.published",
+          "filter": { "quoteType": "variation" },
+          "Next": "WaitForVariationOutcome"
+        }
+      ]
+    },
+
+    "WaitForVariationOutcome": {
+      "Type": "WaitForEvent",
+      "Comment": "Variation submitted — wait for approval, then return to invoice wait.",
+      "EventPatterns": [
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Approved" },
+          "Next": "WaitForCompletionAndInvoice"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Declined" },
+          "Next": "WaitForCompletionAndInvoice"
+        }
+      ]
+    },
+
+    "CheckJobCompletion": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": { "workflowPhase": "complete" }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "JobComplete"
+    },
+
+    "JobFinalOutcome": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "closed",
+              "quoteOutcome.$": "$.event.payload.newStatus"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "JobComplete"
+    },
+
+    "JobComplete": {
+      "Type": "Succeed",
+      "Comment": "Builder Make Safe job workflow completed."
+    }
+  }
+}

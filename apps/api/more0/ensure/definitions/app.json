@@ -1,0 +1,22 @@
+{
+  "app_key": "ensure",
+  "name": "ensure",
+  "display_name": "Ensure Insurance Capabilities",
+  "type": "application",
+  "version": "1.0.0",
+  "description": "Crunchwork-aligned job workflow capabilities for insurance claim management. Implements Builder Assessment, Make Safe, and Works job lifecycles.",
+  "exposure": {
+    "publish": [
+      { "match": "workflow.*" },
+      { "match": "integration.*" },
+      { "match": "connection.*" }
+    ]
+  },
+  "methods": {
+    "info": {
+      "description": "Application metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    }
+  }
+}

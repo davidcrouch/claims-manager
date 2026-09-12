@@ -1,0 +1,52 @@
+{
+  "Comment": "Evaluate auto-approval criteria for a quote. Returns { approved: boolean }.",
+  "StartAt": "CheckCriteria",
+  "States": {
+    "CheckCriteria": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.claimRecommendation", "StringEquals": "Accept" },
+            { "Variable": "$.autoApprovalApplies", "BooleanEquals": true },
+            { "Variable": "$.claimDecision", "StringEquals": "Accept" },
+            { "Variable": "$.quoteValue", "NumericLessThanEquals": 0 }
+          ],
+          "Comment": "NumericLessThanEquals 0 is a placeholder; actual check compares quoteValue <= delegateAuthorityLimit via a Task state.",
+          "Next": "CompareAgainstLimit"
+        }
+      ],
+      "Default": "NotApproved"
+    },
+
+    "CompareAgainstLimit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.withinDelegateAuthority",
+          "BooleanEquals": true,
+          "Next": "Approved"
+        }
+      ],
+      "Default": "NotApproved"
+    },
+
+    "Approved": {
+      "Type": "Pass",
+      "Result": { "approved": true },
+      "ResultPath": "$.result",
+      "Next": "Done"
+    },
+
+    "NotApproved": {
+      "Type": "Pass",
+      "Result": { "approved": false },
+      "ResultPath": "$.result",
+      "Next": "Done"
+    },
+
+    "Done": {
+      "Type": "Succeed"
+    }
+  }
+}

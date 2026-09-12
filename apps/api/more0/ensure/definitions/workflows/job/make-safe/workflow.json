@@ -1,0 +1,33 @@
+{
+  "name": "workflow.job.make-safe",
+  "type": "workflow",
+  "displayName": "Builder Make Safe Job Workflow",
+  "description": "Manages the full lifecycle of a Builder Make Safe job: allocation, customer contact, site attendance, make safe works, quote submission and approval, PO creation, invoicing, variations, and job completion. Can be cancelled if make safe is no longer required.",
+  "version": "1.0.0",
+  "methods": {
+    "info": {
+      "description": "Workflow metadata",
+      "semantics": "informational"
+    },
+    "start": {
+      "description": "Start a new make-safe workflow run (async).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "entityType": { "type": "string", "default": "job" },
+          "entityId": { "type": "string" }
+        },
+        "required": ["jobId", "tenantId"]
+      }
+    },
+    "execute": {
+      "description": "Start and run synchronously until wait or completion."
+    }
+  },
+  "implementation": {
+    "kind": "workflow-asl",
+    "entrypoint": "asl.json"
+  }
+}

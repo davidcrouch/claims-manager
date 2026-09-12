@@ -1,0 +1,42 @@
+{
+  "name": "workflow.job.assessment",
+  "type": "workflow",
+  "displayName": "Builder Assessment Job Workflow",
+  "description": "Manages the full lifecycle of a Builder Assessment job: allocation, customer contact, site attendance scheduling, assessment submission, quote review (with auto-approval), invoicing, and job completion.",
+  "version": "1.0.0",
+  "methods": {
+    "info": {
+      "description": "Workflow metadata",
+      "semantics": "informational"
+    },
+    "start": {
+      "description": "Start a new assessment workflow run (async, returns runId).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string", "description": "Job UUID" },
+          "tenantId": { "type": "string", "description": "Tenant UUID" },
+          "entityType": { "type": "string", "default": "job" },
+          "entityId": { "type": "string", "description": "Same as jobId" },
+          "claimId": { "type": "string", "description": "Claim UUID for child job spawning" },
+          "lookups": {
+            "type": "object",
+            "description": "Pre-resolved lookup IDs for related job types",
+            "properties": {
+              "makeSafeJobType": { "type": "string" },
+              "worksJobType": { "type": "string" }
+            }
+          }
+        },
+        "required": ["jobId", "tenantId"]
+      }
+    },
+    "execute": {
+      "description": "Start and run the workflow synchronously until it waits or completes."
+    }
+  },
+  "implementation": {
+    "kind": "workflow-asl",
+    "entrypoint": "asl.json"
+  }
+}

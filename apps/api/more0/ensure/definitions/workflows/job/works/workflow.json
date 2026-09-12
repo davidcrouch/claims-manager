@@ -1,0 +1,45 @@
+{
+  "name": "workflow.job.works",
+  "type": "workflow",
+  "displayName": "Builder Works Job Workflow",
+  "description": "Manages the full lifecycle of a Builder Works job (repair phase): allocation, scope/contract signing, excess collection, repair scheduling, repair execution, completion certification, invoicing, variations, and job completion. Created when a Builder Assessment quote is approved.",
+  "version": "1.0.0",
+  "methods": {
+    "info": {
+      "description": "Workflow metadata",
+      "semantics": "informational"
+    },
+    "start": {
+      "description": "Start a new works workflow run (async).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string", "description": "Job UUID" },
+          "tenantId": { "type": "string", "description": "Tenant UUID" },
+          "entityType": { "type": "string", "default": "job" },
+          "entityId": { "type": "string", "description": "Same as jobId" },
+          "claimId": { "type": "string", "description": "Claim UUID" },
+          "collectExcess": { "type": "boolean", "description": "Whether excess collection is required" },
+          "excess": { "type": "string", "description": "Excess dollar amount" },
+          "claimRecommendation": { "type": "string", "description": "Claim recommendation from assessment (e.g. Accept)" },
+          "lookups": {
+            "type": "object",
+            "description": "Pre-resolved lookup IDs",
+            "properties": {
+              "makeSafeJobType": { "type": "string" },
+              "worksJobType": { "type": "string" }
+            }
+          }
+        },
+        "required": ["jobId", "tenantId"]
+      }
+    },
+    "execute": {
+      "description": "Start and run synchronously until wait or completion."
+    }
+  },
+  "implementation": {
+    "kind": "workflow-asl",
+    "entrypoint": "asl.json"
+  }
+}

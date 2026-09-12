@@ -1,0 +1,215 @@
+{
+  "name": "integration.claims-mcp",
+  "display_name": "Claims MCP",
+  "type": "integration",
+  "version": "1.0.0",
+  "description": "claims-mcp Streamable HTTP server. Workflows use this integration to create and update jobs, tasks, quotes, and related records in claims-manager. Tools are discovered via tools/list. Transport delegates to more0ai/tool.system.mcp-client.",
+  "tags": [
+    "integration",
+    "mcp",
+    "streamable-http",
+    "claims",
+    "ensure",
+    "jobs",
+    "tasks"
+  ],
+  "aliases": [
+    "claims-mcp",
+    "claims.mcp"
+  ],
+  "type_config": {
+    "protocol": "mcp",
+    "toolRef": "more0ai/tool.system.mcp-client",
+    "app": {
+      "name": "Claims MCP",
+      "vendor": "Ensure",
+      "category": "crm",
+      "description": "Proxy MCP server for claims-manager. Job, task, quote, invoice, and related write operations go through claims-mcp rather than direct database access."
+    },
+    "mcp": {
+      "transport": "streamable_http",
+      "server_url": "http://host.docker.internal:4601/mcp",
+      "discovery": true
+    },
+    "auth": {
+      "supported_types": [
+        "bearer_token"
+      ],
+      "strategies": {
+        "bearer_token": {
+          "description": "Claims-manager JWT as Bearer token. Optional tenant id is sent as x-tenant-id.",
+          "required_fields": [
+            "access_token"
+          ],
+          "fields": [
+            {
+              "name": "access_token",
+              "label": "Access token",
+              "type": "password",
+              "required": true
+            },
+            {
+              "name": "tenant_id",
+              "label": "Tenant ID",
+              "type": "text",
+              "required": false
+            }
+          ],
+          "token_injection": {
+            "location": "header",
+            "key": "Authorization",
+            "template": "Bearer {{access_token}}"
+          }
+        }
+      }
+    }
+  },
+  "methods": {
+    "info": {
+      "description": "Integration metadata",
+      "semantics": "informational"
+    },
+    "get_info": {
+      "description": "Returns Claims MCP integration metadata",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ]
+    },
+    "get_auth_types": {
+      "description": "Returns supported auth strategies",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ]
+    },
+    "get_auth_schema": {
+      "description": "Returns the form schema for a specific auth type",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "auth_type"
+        ],
+        "properties": {
+          "auth_type": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "create_connection": {
+      "description": "Create a connection, then discover MCP tools via tools/list",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "auth_type"
+        ],
+        "properties": {
+          "auth_type": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          },
+          "owner_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "validate_connection": {
+      "description": "Validate Claims MCP connection health",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "connection_id"
+        ],
+        "properties": {
+          "connection_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "list_methods": {
+      "description": "Return discovered claims-mcp tools (create_task, update_job, approve_quote, calculate_dates, …)",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ]
+    },
+    "refresh_auth": {
+      "description": "Refresh connection credentials",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "auth_type",
+          "secrets"
+        ],
+        "properties": {
+          "auth_type": {
+            "type": "string"
+          },
+          "secrets": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "dispatch": {
+      "description": "Invoke a discovered claims-mcp tool via more0ai/tool.system.mcp-client (Streamable HTTP)",
+      "semantics": "work",
+      "channels": [
+        "sync",
+        "stream"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "method",
+          "params"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "Discovered MCP tool name (e.g. create_task, update_job)"
+          },
+          "params": {
+            "type": "object"
+          },
+          "auth_context": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  },
+  "tools": [
+    "more0ai/tool.system.mcp-client@1.0.0^"
+  ],
+  "implementation": {
+    "kind": "data",
+    "execution": {
+      "kind": "integration"
+    }
+  }
+}

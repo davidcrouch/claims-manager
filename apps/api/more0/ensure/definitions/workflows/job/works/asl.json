@@ -1,0 +1,896 @@
+{
+  "Comment": "Builder Works job lifecycle: Allocated -> Scope -> Excess -> Schedule -> Repairs -> Complete -> Certificate -> Invoice -> Job Complete",
+  "StartAt": "SetupWorksJob",
+  "States": {
+
+    "SetupWorksJob": {
+      "Type": "Pass",
+      "Parameters": {
+        "jobId.$": "$.jobId",
+        "tenantId.$": "$.tenantId",
+        "entityType": "job",
+        "entityId.$": "$.jobId",
+        "phase": "allocated",
+        "collectExcess.$": "$.collectExcess",
+        "claimRecommendation.$": "$.claimRecommendation",
+        "scopeSigned": false,
+        "excessCollected": false,
+        "gate": {
+          "scopeSigned": false,
+          "excessCollected": false
+        }
+      },
+      "Next": "CreateInitialTasks"
+    },
+
+    "CreateInitialTasks": {
+      "Type": "Task",
+      "Comment": "Create Send Scope/Contract task and recurring Repair Update task.",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Send Scope / Contract",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "View scope",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.sendScopeTask",
+      "Next": "CreateRepairUpdateTask"
+    },
+
+    "CreateRepairUpdateTask": {
+      "Type": "Task",
+      "Comment": "Create recurring Repair Update task (re-creates every 5 business days).",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "CheckExcessRequired"
+    },
+
+    "CheckExcessRequired": {
+      "Type": "Choice",
+      "Comment": "Check if excess collection is required.",
+      "Choices": [
+        {
+          "Variable": "$.collectExcess",
+          "BooleanEquals": true,
+          "Next": "CreateSendExcessTask"
+        }
+      ],
+      "Default": "WaitForScopeActions"
+    },
+
+    "CreateSendExcessTask": {
+      "Type": "Task",
+      "Comment": "Create Send Excess task (only if excess required).",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Send Excess",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_invoice",
+              "label": "Send excess invoice",
+              "context": {
+                "entityType": "Invoice",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.sendExcessTask",
+      "Next": "WaitForScopeAndExcessActions"
+    },
+
+    "WaitForScopeActions": {
+      "Type": "WaitForEvent",
+      "Comment": "No excess required — wait for scope workflow only.",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Send Scope / Contract" },
+          "Next": "OnScopeSent"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "workflowPhase", "value": "awaiting_scope" },
+          "Next": "OnScopeSent"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Repair Update" },
+          "Next": "OnRepairUpdateCompleted_PreScope"
+        }
+      ]
+    },
+
+    "OnRepairUpdateCompleted_PreScope": {
+      "Type": "Task",
+      "Comment": "Repair Update completed. Create next one due in 5 business days.",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "WaitForScopeActions"
+    },
+
+    "WaitForScopeAndExcessActions": {
+      "Type": "WaitForEvent",
+      "Comment": "Both scope and excess tracks need to complete. Wait for scope-related events.",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Send Scope / Contract" },
+          "Next": "OnScopeSentWithExcess"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Send Excess" },
+          "Next": "OnExcessSent"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Repair Update" },
+          "Next": "OnRepairUpdateCompleted_PreScopeExcess"
+        }
+      ]
+    },
+
+    "OnRepairUpdateCompleted_PreScopeExcess": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "WaitForScopeAndExcessActions"
+    },
+
+    "OnScopeSent": {
+      "Type": "Task",
+      "Comment": "Scope sent (no excess track). Update Scope Sent Date, create Signed Scope task.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "scopeSentDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "awaiting_scope"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateSignedScopeTask"
+    },
+
+    "CreateSignedScopeTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Signed Scope / Contract",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "View scope",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.signedScopeTask",
+      "Next": "WaitForScopeSigned"
+    },
+
+    "WaitForScopeSigned": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Signed Scope / Contract" },
+          "Next": "OnScopeSignedNoExcess"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "scopeSignedDate" },
+          "Next": "OnScopeSignedNoExcess"
+        }
+      ]
+    },
+
+    "OnScopeSignedNoExcess": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "scopeSignedDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "scope_signed"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "GateReadyToSchedule"
+    },
+
+    "OnScopeSentWithExcess": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "scopeSentDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "awaiting_scope"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateSignedScopeTaskWithExcess"
+    },
+
+    "CreateSignedScopeTaskWithExcess": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Signed Scope / Contract",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "View scope",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.signedScopeTask",
+      "Next": "WaitForScopeAndExcessCompletion"
+    },
+
+    "OnExcessSent": {
+      "Type": "Task",
+      "Comment": "Excess invoice sent. Set Excess Sent Date, create Collect Excess task.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "excessSentDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "awaiting_excess"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateCollectExcessTask"
+    },
+
+    "CreateCollectExcessTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Collect Excess",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_invoice",
+              "label": "Collect excess",
+              "context": {
+                "entityType": "Invoice",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.collectExcessTask",
+      "Next": "WaitForScopeAndExcessCompletion"
+    },
+
+    "WaitForScopeAndExcessCompletion": {
+      "Type": "WaitForEvent",
+      "Comment": "Wait for both scope signed AND excess collected before scheduling.",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Signed Scope / Contract" },
+          "Next": "MarkScopeSigned"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Collect Excess" },
+          "Next": "MarkExcessCollected"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "scopeSignedDate" },
+          "Next": "MarkScopeSigned"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "excessPaymentCollected" },
+          "Next": "MarkExcessCollected"
+        }
+      ]
+    },
+
+    "MarkScopeSigned": {
+      "Type": "Pass",
+      "Parameters": {
+        "scopeSigned": true,
+        "excessCollected.$": "$.gate.excessCollected"
+      },
+      "ResultPath": "$.gate",
+      "Next": "CheckGateReady"
+    },
+
+    "MarkExcessCollected": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "excessCollectedDate.$": "$.event.payload.completedAt",
+              "excessPaymentCollected": true,
+              "workflowPhase": "excess_collected"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "MarkExcessCollectedGate"
+    },
+
+    "MarkExcessCollectedGate": {
+      "Type": "Pass",
+      "Parameters": {
+        "scopeSigned.$": "$.gate.scopeSigned",
+        "excessCollected": true
+      },
+      "ResultPath": "$.gate",
+      "Next": "CheckGateReady"
+    },
+
+    "CheckGateReady": {
+      "Type": "Choice",
+      "Comment": "Both scope signed and excess collected? If yes, proceed to scheduling.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.gate.scopeSigned", "BooleanEquals": true },
+            { "Variable": "$.gate.excessCollected", "BooleanEquals": true }
+          ],
+          "Next": "GateReadyToSchedule"
+        }
+      ],
+      "Default": "WaitForScopeAndExcessCompletion"
+    },
+
+    "GateReadyToSchedule": {
+      "Type": "Task",
+      "Comment": "Both prerequisites met. Create Schedule Repairs task.",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Schedule Repairs",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "create_appointment",
+              "label": "Schedule repairs",
+              "context": {
+                "entityType": "Appointment",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.scheduleRepairsTask",
+      "Next": "WaitForRepairsScheduled"
+    },
+
+    "WaitForRepairsScheduled": {
+      "Type": "WaitForEvent",
+      "Comment": "Wait for Estimated Start + Completion Dates to be set.",
+      "EventPatterns": [
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "estimatedDatesSet" },
+          "Next": "OnRepairsScheduled"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Repair Update" },
+          "Next": "OnRepairUpdateSchedulePhase"
+        }
+      ]
+    },
+
+    "OnRepairUpdateSchedulePhase": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "WaitForRepairsScheduled"
+    },
+
+    "OnRepairsScheduled": {
+      "Type": "Task",
+      "Comment": "Repairs scheduled. Set Works Scheduled Date, status -> Scheduled, create Commence Repairs task.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "worksScheduledDate.$": "$.event.payload.scheduledAt",
+              "estimatedStartDate.$": "$.event.payload.estimatedStartDate",
+              "estimatedCompletionDate.$": "$.event.payload.estimatedCompletionDate",
+              "workflowPhase": "scheduled"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateCommenceRepairsTask"
+    },
+
+    "CreateCommenceRepairsTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Commence Repairs",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Go to job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.commenceRepairsTask",
+      "Next": "WaitForRepairsCommenced"
+    },
+
+    "WaitForRepairsCommenced": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Commence Repairs" },
+          "Next": "OnRepairsCommenced"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "workflowPhase", "value": "repairs_in_progress" },
+          "Next": "OnRepairsCommenced"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Repair Update" },
+          "Next": "OnRepairUpdateRepairPhase"
+        }
+      ]
+    },
+
+    "OnRepairUpdateRepairPhase": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "WaitForRepairsCommenced"
+    },
+
+    "OnRepairsCommenced": {
+      "Type": "Task",
+      "Comment": "Repairs commenced. Set Works Commencement Date, create Upload Completion Certificate task.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "worksCommencementDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "repairs_in_progress"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateUploadCertificateTask"
+    },
+
+    "CreateUploadCertificateTask": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Upload Completion Certificate",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "High",
+            "status": "Open",
+            "originType": "automation",
+            "action": {
+              "actionKey": "upload_document",
+              "label": "Upload certificate",
+              "context": {
+                "entityType": "Document",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.uploadCertTask",
+      "Next": "WaitForRepairsComplete"
+    },
+
+    "WaitForRepairsComplete": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "workflowPhase", "value": "repairs_complete" },
+          "Next": "OnRepairsComplete"
+        },
+        {
+          "eventType": "task.completed",
+          "filter": { "taskName": "Repair Update" },
+          "Next": "OnRepairUpdateDuringRepairs"
+        },
+        {
+          "eventType": "quote.published",
+          "filter": { "quoteType": "variation" },
+          "Next": "OnVariationSubmitted"
+        }
+      ]
+    },
+
+    "OnRepairUpdateDuringRepairs": {
+      "Type": "Task",
+      "Resource": "tool.claims.create_task",
+      "Parameters": {
+        "params": {
+          "data": {
+            "name": "Repair Update",
+            "relatedEntityType": "Job",
+            "relatedEntityId.$": "$.jobId",
+            "jobId.$": "$.jobId",
+            "priority": "Medium",
+            "status": "Open",
+            "originType": "automation",
+            "description": "Provide a progress update to the insurer. Due within 5 business days.",
+            "action": {
+              "actionKey": "view_entity",
+              "label": "Update job",
+              "context": {
+                "entityType": "Job",
+                "jobId.$": "$.jobId"
+              }
+            }
+          }
+        }
+      },
+      "ResultPath": "$.repairUpdateTask",
+      "Next": "WaitForRepairsComplete"
+    },
+
+    "OnVariationSubmitted": {
+      "Type": "WaitForEvent",
+      "Comment": "Variation quote published. Wait for approval then return to repair phase.",
+      "EventPatterns": [
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Approved" },
+          "Next": "WaitForRepairsComplete"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Declined" },
+          "Next": "WaitForRepairsComplete"
+        }
+      ]
+    },
+
+    "OnRepairsComplete": {
+      "Type": "Task",
+      "Comment": "Repairs complete. Set Works Completion Date.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "worksCompletionDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "repairs_complete"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "WaitForCompletionCertificate"
+    },
+
+    "WaitForCompletionCertificate": {
+      "Type": "WaitForEvent",
+      "Comment": "Wait for completion certificate upload or verbal confirmation.",
+      "EventPatterns": [
+        {
+          "eventType": "document.uploaded",
+          "filter": { "documentType": "Completion Certificate" },
+          "Next": "OnCertificateUploaded"
+        },
+        {
+          "eventType": "field.updated",
+          "filter": { "field": "dateCustomerConfirmedCompletion" },
+          "Next": "OnVerbalConfirmation"
+        }
+      ]
+    },
+
+    "OnCertificateUploaded": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "completionCertificateUploadDate.$": "$.event.payload.uploadedAt",
+              "workflowPhase": "certificate_uploaded"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "WaitForPOCompletion"
+    },
+
+    "OnVerbalConfirmation": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "completion_confirmed"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "WaitForPOCompletion"
+    },
+
+    "WaitForPOCompletion": {
+      "Type": "WaitForEvent",
+      "Comment": "Wait for PO to be fully invoiced and completed.",
+      "EventPatterns": [
+        {
+          "eventType": "purchase_order.completed",
+          "Next": "MarkJobComplete"
+        },
+        {
+          "eventType": "quote.published",
+          "filter": { "quoteType": "variation" },
+          "Next": "OnLateVariation"
+        }
+      ]
+    },
+
+    "OnLateVariation": {
+      "Type": "WaitForEvent",
+      "EventPatterns": [
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Approved" },
+          "Next": "WaitForPOCompletion"
+        },
+        {
+          "eventType": "quote.status_changed",
+          "filter": { "newStatus": "Declined" },
+          "Next": "WaitForPOCompletion"
+        }
+      ]
+    },
+
+    "MarkJobComplete": {
+      "Type": "Task",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": { "workflowPhase": "complete" }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "JobComplete"
+    },
+
+    "JobComplete": {
+      "Type": "Succeed",
+      "Comment": "Builder Works job workflow completed."
+    }
+  }
+}
