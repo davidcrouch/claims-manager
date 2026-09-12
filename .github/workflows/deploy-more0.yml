@@ -53,7 +53,8 @@ jobs:
           AUTH_SERVER_URL: ${{ vars.MORE0_AUTH_SERVER_URL }}
           MORE0_CLIENT_ID: ${{ secrets.MORE0_CLIENT_ID }}
           MORE0_CLIENT_SECRET: ${{ secrets.MORE0_CLIENT_SECRET }}
-          MORE0_VERSION: "1.0.0+${{ github.sha }}"
+          # Registry semver: X.Y.Z or X.Y.Z-prerelease (no +build metadata)
+          MORE0_VERSION: "1.0.0-${{ github.sha }}"
           MORE0_TARGET_REVISION: immutable
           MORE0_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
           DEFINITIONS_DIR: ./apps/api/more0/definitions
