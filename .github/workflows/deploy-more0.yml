@@ -1,0 +1,60 @@
+name: Deploy more0 definitions
+
+# Publishes apps/api/more0/definitions through the public HTTP gateway.
+# See ../capabilities/docs/guides/external_app_gateway_ci_deploy.md
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/more0/definitions/**"
+      - "scripts/deploy-more0.mjs"
+      - ".github/workflows/deploy-more0.yml"
+  pull_request:
+    paths:
+      - "apps/api/more0/definitions/**"
+      - "scripts/deploy-more0.mjs"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate import without writing (dry_run=true)"
+        type: boolean
+        default: false
+
+jobs:
+  more0-import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Dry-run import (pull requests)
+        if: github.event_name == 'pull_request'
+        env:
+          GATEWAY_URL: ${{ vars.MORE0_GATEWAY_URL }}
+          AUTH_SERVER_URL: ${{ vars.MORE0_AUTH_SERVER_URL }}
+          MORE0_CLIENT_ID: ${{ secrets.MORE0_CLIENT_ID }}
+          MORE0_CLIENT_SECRET: ${{ secrets.MORE0_CLIENT_SECRET }}
+          MORE0_VERSION: "0.0.0-pr.${{ github.event.pull_request.number }}"
+          MORE0_TARGET_REVISION: working
+          MORE0_DRY_RUN: "true"
+          DEFINITIONS_DIR: ./apps/api/more0/definitions
+        run: node scripts/deploy-more0.mjs
+
+      - name: Publish import (main / manual)
+        if: >
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GATEWAY_URL: ${{ vars.MORE0_GATEWAY_URL }}
+          AUTH_SERVER_URL: ${{ vars.MORE0_AUTH_SERVER_URL }}
+          MORE0_CLIENT_ID: ${{ secrets.MORE0_CLIENT_ID }}
+          MORE0_CLIENT_SECRET: ${{ secrets.MORE0_CLIENT_SECRET }}
+          MORE0_VERSION: "1.0.0+${{ github.sha }}"
+          MORE0_TARGET_REVISION: immutable
+          MORE0_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
+          DEFINITIONS_DIR: ./apps/api/more0/definitions
+        run: node scripts/deploy-more0.mjs
