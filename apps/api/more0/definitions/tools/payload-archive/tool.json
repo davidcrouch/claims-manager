@@ -6,6 +6,11 @@
   "description": "Archive a CW entity payload to S3/MinIO under a deterministic key and return the object URI + etag.",
   "tags": ["claims-manager", "webhook", "s3", "archive"],
   "methods": {
+    "info": {
+      "description": "Capability metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    },
     "execute": {
       "description": "Serialize the payload, compute a sha256 hash, and PUT it to S3 at the canonical key.",
       "input": {

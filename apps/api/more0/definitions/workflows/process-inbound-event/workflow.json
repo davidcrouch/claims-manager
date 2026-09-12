@@ -6,6 +6,11 @@
   "description": "Given an inbound_webhook_events row id, drives the full pipeline: read event → fetch CW entity → archive payload to S3 → upsert external object → project to internal entity. Each step is an HTTP-backed tool; granular failure branches flip event + log status.",
   "tags": ["claims-manager", "webhook", "crunchwork"],
   "methods": {
+    "info": {
+      "description": "Capability metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    },
     "execute": {
       "description": "Execute the webhook processing pipeline for a single inbound_webhook_events row.",
       "input": {

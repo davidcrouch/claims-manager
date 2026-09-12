@@ -6,6 +6,11 @@
   "description": "Advance the external_processing_log status and, optionally, the parent inbound_webhook_events.processing_status. Used by terminal workflow states (completed / failed branches).",
   "tags": ["claims-manager", "webhook", "processing-log", "audit"],
   "methods": {
+    "info": {
+      "description": "Capability metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    },
     "execute": {
       "description": "Update processing log entry status and optionally mirror the status onto the webhook event row.",
       "input": {

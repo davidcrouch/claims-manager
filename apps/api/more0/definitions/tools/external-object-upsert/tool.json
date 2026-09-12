@@ -6,6 +6,11 @@
   "description": "Upsert an external object from a fetched CW entity payload and stamp the S3 archive URI. Atomically creates / advances the external_processing_log row and marks the inbound_webhook_events row as fetched.",
   "tags": ["claims-manager", "webhook", "external-object", "upsert"],
   "methods": {
+    "info": {
+      "description": "Capability metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    },
     "execute": {
       "description": "Upsert external object with payload hash and versioning, write archive URI onto the version row, and advance processing-log + webhook-event status in a single DB transaction.",
       "input": {

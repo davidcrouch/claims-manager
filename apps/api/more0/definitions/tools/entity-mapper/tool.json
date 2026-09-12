@@ -6,6 +6,11 @@
   "description": "Project an external object into the matching internal entity row. Dispatches to the registered CW mapper for the given entity type.",
   "tags": ["claims-manager", "webhook", "mapper", "projection"],
   "methods": {
+    "info": {
+      "description": "Capability metadata",
+      "semantics": "query",
+      "channels": ["sync"]
+    },
     "execute": {
       "description": "Map external object to internal entity row; optionally mark the processing-log entry completed.",
       "input": {
