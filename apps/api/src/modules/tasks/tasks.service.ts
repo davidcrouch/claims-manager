@@ -485,7 +485,7 @@ export class TasksService {
     }
 
     if (params.body.action !== undefined) {
-      const existingPayload = ((existing as Record<string, unknown>).taskPayload ?? {}) as Record<string, unknown>;
+      const existingPayload = (existing.taskPayload ?? {}) as Record<string, unknown>;
       localPatch.taskPayload = {
         ...existingPayload,
         action: params.body.action,
