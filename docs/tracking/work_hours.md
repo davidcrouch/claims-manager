@@ -1286,7 +1286,7 @@
   API production type-check completes cleanly.
   Outcome: automated checks can proceed to image build and staging deploy.
 
-- `2026-09-13` `38ba5c0` **5 h**
+- `2026-09-13` `85787b4` **5 h**
   `9 files | +611 −351 | Tier 3 complex | Heavy orchestration`
   Lay summary: Builder job workflows now follow the insurer process diagrams more closely, and the system can cancel purchase orders, close leftover tasks, and check whether a job is finished.
   **Aligned builder job workflows with process diagrams and added supporting tools.**
