@@ -128,6 +128,33 @@ export function registerJobsTools(server: McpServer, api: ClaimsApiClient): void
   );
 
   server.tool(
+    'check_job_status',
+    categoryDesc(
+      CAT,
+      'Check whether a job is in a terminal workflow status (complete, cancelled, closed). Returns { isTerminal, phase }.',
+    ),
+    {
+      jobId: z.string().describe('Job UUID'),
+    },
+    async ({ jobId }) => {
+      try {
+        const job = await api.request<Record<string, unknown>>(`/jobs/${jobId}`);
+        const customData =
+          (job.customData as Record<string, unknown> | undefined) ?? {};
+        const phase = (customData.workflowPhase as string) ?? '';
+        const terminalPhases = ['complete', 'cancelled', 'closed'];
+        return toolResult({
+          isTerminal: terminalPhases.includes(phase),
+          phase,
+          jobId,
+        });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
     'add_job_contacts',
     categoryDesc(CAT, 'Add contacts to a job.'),
     {

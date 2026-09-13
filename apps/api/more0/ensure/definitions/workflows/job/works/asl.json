@@ -17,8 +17,29 @@
         "gate": {
           "scopeSigned": false,
           "excessCollected": false
+        },
+        "completionGate": {
+          "certificateDone": false,
+          "poDone": false
         }
       },
+      "Next": "SetJobStatusAllocated"
+    },
+    "SetJobStatusAllocated": {
+      "Type": "Task",
+      "Comment": "FIX-W3: Explicitly set job status to Allocated (BPMN parallel step at start).",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "allocated"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
       "Next": "CreateInitialTasks"
     },
     "CreateInitialTasks": {
@@ -148,9 +169,38 @@
       "Next": "WaitForScopeActions__Route",
       "Comment": "No excess required — wait for scope workflow only."
     },
-    "OnRepairUpdateCompleted_PreScope": {
+    "OnRepairUpdateCompleted": {
       "Type": "Task",
-      "Comment": "Repair Update completed. Create next one due in 5 business days.",
+      "Comment": "FIX-W6: Repair Update completed. Check terminal status before creating next one.",
+      "Resource": "tool.claims.check_job_status",
+      "Parameters": {
+        "params": {
+          "jobId.$": "$.jobId"
+        }
+      },
+      "ResultPath": "$.statusCheck",
+      "Next": "CheckRepairUpdateTerminal"
+    },
+    "CheckRepairUpdateTerminal": {
+      "Type": "Choice",
+      "Comment": "FIX-W6: BPMN guard — do not recreate Repair Update if job is Complete or Cancelled.",
+      "Choices": [
+        {
+          "Variable": "$.statusCheck.isTerminal",
+          "BooleanEquals": true,
+          "Next": "SkipRepairUpdate"
+        }
+      ],
+      "Default": "RecreateRepairUpdateTask"
+    },
+    "SkipRepairUpdate": {
+      "Type": "Pass",
+      "Comment": "Job is in terminal status — no more Repair Update tasks needed.",
+      "Next": "JobComplete"
+    },
+    "RecreateRepairUpdateTask": {
+      "Type": "Task",
+      "Comment": "Create next Repair Update task due in 5 business days.",
       "Resource": "tool.claims.create_task",
       "Parameters": {
         "params": {
@@ -175,7 +225,39 @@
         }
       },
       "ResultPath": "$.repairUpdateTask",
-      "Next": "WaitForScopeActions"
+      "Next": "ReturnToCurrentWait"
+    },
+    "ReturnToCurrentWait": {
+      "Type": "Choice",
+      "Comment": "Route back to the appropriate wait state after Repair Update recreation. Uses current phase.",
+      "Choices": [
+        {
+          "Variable": "$.phase",
+          "StringEquals": "pre_scope",
+          "Next": "WaitForScopeActions"
+        },
+        {
+          "Variable": "$.phase",
+          "StringEquals": "pre_scope_excess",
+          "Next": "WaitForScopeAndExcessActions"
+        },
+        {
+          "Variable": "$.phase",
+          "StringEquals": "scheduling",
+          "Next": "WaitForRepairsScheduled"
+        },
+        {
+          "Variable": "$.phase",
+          "StringEquals": "repairing",
+          "Next": "WaitForRepairsCommenced"
+        },
+        {
+          "Variable": "$.phase",
+          "StringEquals": "repairs_active",
+          "Next": "WaitForRepairsComplete"
+        }
+      ],
+      "Default": "WaitForRepairsComplete"
     },
     "WaitForScopeAndExcessActions": {
       "Type": "Task",
@@ -205,34 +287,6 @@
       "ResultPath": "$.event",
       "Next": "WaitForScopeAndExcessActions__Route",
       "Comment": "Both scope and excess tracks need to complete. Wait for scope-related events."
-    },
-    "OnRepairUpdateCompleted_PreScopeExcess": {
-      "Type": "Task",
-      "Resource": "tool.claims.create_task",
-      "Parameters": {
-        "params": {
-          "data": {
-            "name": "Repair Update",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "Medium",
-            "status": "Open",
-            "originType": "automation",
-            "description": "Provide a progress update to the insurer. Due within 5 business days.",
-            "action": {
-              "actionKey": "view_entity",
-              "label": "Update job",
-              "context": {
-                "entityType": "Job",
-                "jobId.$": "$.jobId"
-              }
-            }
-          }
-        }
-      },
-      "ResultPath": "$.repairUpdateTask",
-      "Next": "WaitForScopeAndExcessActions"
     },
     "OnScopeSent": {
       "Type": "Task",
@@ -443,6 +497,24 @@
       "Comment": "Wait for both scope signed AND excess collected before scheduling."
     },
     "MarkScopeSigned": {
+      "Type": "Task",
+      "Comment": "FIX-W7: Update job with Scope Signed Date and phase, then flag gate.",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "scopeSignedDate.$": "$.event.payload.completedAt",
+              "workflowPhase": "scope_signed"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "MarkScopeSignedGate"
+    },
+    "MarkScopeSignedGate": {
       "Type": "Pass",
       "Parameters": {
         "scopeSigned": true,
@@ -549,34 +621,6 @@
       "Next": "WaitForRepairsScheduled__Route",
       "Comment": "Wait for Estimated Start + Completion Dates to be set."
     },
-    "OnRepairUpdateSchedulePhase": {
-      "Type": "Task",
-      "Resource": "tool.claims.create_task",
-      "Parameters": {
-        "params": {
-          "data": {
-            "name": "Repair Update",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "Medium",
-            "status": "Open",
-            "originType": "automation",
-            "description": "Provide a progress update to the insurer. Due within 5 business days.",
-            "action": {
-              "actionKey": "view_entity",
-              "label": "Update job",
-              "context": {
-                "entityType": "Job",
-                "jobId.$": "$.jobId"
-              }
-            }
-          }
-        }
-      },
-      "ResultPath": "$.repairUpdateTask",
-      "Next": "WaitForRepairsScheduled"
-    },
     "OnRepairsScheduled": {
       "Type": "Task",
       "Comment": "Repairs scheduled. Set Works Scheduled Date, status -> Scheduled, create Commence Repairs task.",
@@ -595,6 +639,28 @@
         }
       },
       "ResultPath": "$.jobUpdate",
+      "Next": "CompleteScheduleRepairsTask"
+    },
+    "CompleteScheduleRepairsTask": {
+      "Type": "Task",
+      "Comment": "FIX-W4: Complete the Schedule Repairs task now that dates are set.",
+      "Resource": "tool.claims.update_task",
+      "Parameters": {
+        "params": {
+          "id.$": "$.scheduleRepairsTask.id",
+          "data": {
+            "status": "Completed"
+          }
+        }
+      },
+      "ResultPath": "$.taskCompleteResult",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.taskCompleteError",
+          "Next": "CreateCommenceRepairsTask"
+        }
+      ],
       "Next": "CreateCommenceRepairsTask"
     },
     "CreateCommenceRepairsTask": {
@@ -652,34 +718,6 @@
       },
       "ResultPath": "$.event",
       "Next": "WaitForRepairsCommenced__Route"
-    },
-    "OnRepairUpdateRepairPhase": {
-      "Type": "Task",
-      "Resource": "tool.claims.create_task",
-      "Parameters": {
-        "params": {
-          "data": {
-            "name": "Repair Update",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "Medium",
-            "status": "Open",
-            "originType": "automation",
-            "description": "Provide a progress update to the insurer. Due within 5 business days.",
-            "action": {
-              "actionKey": "view_entity",
-              "label": "Update job",
-              "context": {
-                "entityType": "Job",
-                "jobId.$": "$.jobId"
-              }
-            }
-          }
-        }
-      },
-      "ResultPath": "$.repairUpdateTask",
-      "Next": "WaitForRepairsCommenced"
     },
     "OnRepairsCommenced": {
       "Type": "Task",
@@ -755,34 +793,6 @@
       "ResultPath": "$.event",
       "Next": "WaitForRepairsComplete__Route"
     },
-    "OnRepairUpdateDuringRepairs": {
-      "Type": "Task",
-      "Resource": "tool.claims.create_task",
-      "Parameters": {
-        "params": {
-          "data": {
-            "name": "Repair Update",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "Medium",
-            "status": "Open",
-            "originType": "automation",
-            "description": "Provide a progress update to the insurer. Due within 5 business days.",
-            "action": {
-              "actionKey": "view_entity",
-              "label": "Update job",
-              "context": {
-                "entityType": "Job",
-                "jobId.$": "$.jobId"
-              }
-            }
-          }
-        }
-      },
-      "ResultPath": "$.repairUpdateTask",
-      "Next": "WaitForRepairsComplete"
-    },
     "OnVariationSubmitted": {
       "Type": "Task",
       "Resource": "states.waitForTaskToken",
@@ -822,10 +832,11 @@
         }
       },
       "ResultPath": "$.jobUpdate",
-      "Next": "WaitForCompletionCertificate"
+      "Next": "WaitForCertificateAndPO"
     },
-    "WaitForCompletionCertificate": {
+    "WaitForCertificateAndPO": {
       "Type": "Task",
+      "Comment": "FIX-W1: Wait for BOTH certificate/confirmation AND PO completion (BPMN parallel gate). Either can arrive first.",
       "Resource": "states.waitForTaskToken",
       "Parameters": {
         "eventPatterns": [
@@ -840,12 +851,20 @@
             "filter": {
               "field": "dateCustomerConfirmedCompletion"
             }
+          },
+          {
+            "eventType": "purchase_order.completed"
+          },
+          {
+            "eventType": "quote.published",
+            "filter": {
+              "quoteType": "variation"
+            }
           }
         ]
       },
       "ResultPath": "$.event",
-      "Next": "WaitForCompletionCertificate__Route",
-      "Comment": "Wait for completion certificate upload or verbal confirmation."
+      "Next": "WaitForCertificateAndPO__Route"
     },
     "OnCertificateUploaded": {
       "Type": "Task",
@@ -862,7 +881,7 @@
         }
       },
       "ResultPath": "$.jobUpdate",
-      "Next": "WaitForPOCompletion"
+      "Next": "MarkCertificateDone"
     },
     "OnVerbalConfirmation": {
       "Type": "Task",
@@ -878,27 +897,47 @@
         }
       },
       "ResultPath": "$.jobUpdate",
-      "Next": "WaitForPOCompletion"
+      "Next": "MarkCertificateDone"
     },
-    "WaitForPOCompletion": {
-      "Type": "Task",
-      "Resource": "states.waitForTaskToken",
+    "MarkCertificateDone": {
+      "Type": "Pass",
+      "Comment": "FIX-W1: Flag certificate as done in completion gate.",
       "Parameters": {
-        "eventPatterns": [
-          {
-            "eventType": "purchase_order.completed"
-          },
-          {
-            "eventType": "quote.published",
-            "filter": {
-              "quoteType": "variation"
-            }
-          }
-        ]
+        "certificateDone": true,
+        "poDone.$": "$.completionGate.poDone"
       },
-      "ResultPath": "$.event",
-      "Next": "WaitForPOCompletion__Route",
-      "Comment": "Wait for PO to be fully invoiced and completed."
+      "ResultPath": "$.completionGate",
+      "Next": "CheckCompletionGate"
+    },
+    "MarkPODone": {
+      "Type": "Pass",
+      "Comment": "FIX-W1: Flag PO as done in completion gate.",
+      "Parameters": {
+        "certificateDone.$": "$.completionGate.certificateDone",
+        "poDone": true
+      },
+      "ResultPath": "$.completionGate",
+      "Next": "CheckCompletionGate"
+    },
+    "CheckCompletionGate": {
+      "Type": "Choice",
+      "Comment": "FIX-W1: Both certificate and PO must be done before marking job complete (BPMN parallel join).",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.completionGate.certificateDone",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.completionGate.poDone",
+              "BooleanEquals": true
+            }
+          ],
+          "Next": "MarkJobComplete"
+        }
+      ],
+      "Default": "WaitForCertificateAndPO"
     },
     "OnLateVariation": {
       "Type": "Task",
@@ -987,7 +1026,7 @@
               "StringEquals": "Repair Update"
             }
           ],
-          "Next": "OnRepairUpdateCompleted_PreScope"
+          "Next": "OnRepairUpdateCompleted"
         }
       ],
       "Default": "WaitForScopeActions"
@@ -1033,7 +1072,7 @@
               "StringEquals": "Repair Update"
             }
           ],
-          "Next": "OnRepairUpdateCompleted_PreScopeExcess"
+          "Next": "OnRepairUpdateCompleted"
         }
       ],
       "Default": "WaitForScopeAndExcessActions"
@@ -1158,7 +1197,7 @@
               "StringEquals": "Repair Update"
             }
           ],
-          "Next": "OnRepairUpdateSchedulePhase"
+          "Next": "OnRepairUpdateCompleted"
         }
       ],
       "Default": "WaitForRepairsScheduled"
@@ -1208,7 +1247,7 @@
               "StringEquals": "Repair Update"
             }
           ],
-          "Next": "OnRepairUpdateRepairPhase"
+          "Next": "OnRepairUpdateCompleted"
         }
       ],
       "Default": "WaitForRepairsCommenced"
@@ -1245,7 +1284,7 @@
               "StringEquals": "Repair Update"
             }
           ],
-          "Next": "OnRepairUpdateDuringRepairs"
+          "Next": "OnRepairUpdateCompleted"
         },
         {
           "And": [
@@ -1296,9 +1335,9 @@
       ],
       "Default": "OnVariationSubmitted"
     },
-    "WaitForCompletionCertificate__Route": {
+    "WaitForCertificateAndPO__Route": {
       "Type": "Choice",
-      "Comment": "Route resume payload for WaitForCompletionCertificate",
+      "Comment": "FIX-W1: Route for the parallel certificate + PO completion gate.",
       "Choices": [
         {
           "And": [
@@ -1325,18 +1364,11 @@
             }
           ],
           "Next": "OnVerbalConfirmation"
-        }
-      ],
-      "Default": "WaitForCompletionCertificate"
-    },
-    "WaitForPOCompletion__Route": {
-      "Type": "Choice",
-      "Comment": "Route resume payload for WaitForPOCompletion",
-      "Choices": [
+        },
         {
           "Variable": "$.event.eventType",
           "StringEquals": "purchase_order.completed",
-          "Next": "MarkJobComplete"
+          "Next": "MarkPODone"
         },
         {
           "And": [
@@ -1352,7 +1384,7 @@
           "Next": "OnLateVariation"
         }
       ],
-      "Default": "WaitForPOCompletion"
+      "Default": "WaitForCertificateAndPO"
     },
     "OnLateVariation__Route": {
       "Type": "Choice",
@@ -1369,7 +1401,7 @@
               "StringEquals": "Approved"
             }
           ],
-          "Next": "WaitForPOCompletion"
+          "Next": "WaitForCertificateAndPO"
         },
         {
           "And": [
@@ -1382,7 +1414,7 @@
               "StringEquals": "Declined"
             }
           ],
-          "Next": "WaitForPOCompletion"
+          "Next": "WaitForCertificateAndPO"
         }
       ],
       "Default": "OnLateVariation"

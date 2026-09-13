@@ -150,51 +150,20 @@
     },
     "OnCallToScheduleFailed": {
       "Type": "Task",
-      "Comment": "Create a follow-up 'Call to Schedule #2' task.",
-      "Resource": "tool.claims.create_task",
+      "Comment": "FIX-A4: Contact attempt failed. Update Contact Date and loop back to create a new Call to Schedule task (BPMN shows loop, not a #2 task).",
+      "Resource": "tool.claims.update_job",
       "Parameters": {
         "params": {
+          "id.$": "$.jobId",
           "data": {
-            "name": "Call to Schedule #2",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "High",
-            "status": "Open",
-            "originType": "automation",
-            "action": {
-              "actionKey": "create_appointment",
-              "label": "Schedule appointment",
-              "context": {
-                "entityType": "Appointment",
-                "jobId.$": "$.jobId"
-              }
+            "customData": {
+              "contactDate.$": "$.event.payload.failedAt"
             }
           }
         }
       },
-      "ResultPath": "$.callToSchedule2Task",
-      "Next": "WaitForContactOrScheduleRetry"
-    },
-    "WaitForContactOrScheduleRetry": {
-      "Type": "Task",
-      "Resource": "states.waitForTaskToken",
-      "Parameters": {
-        "eventPatterns": [
-          {
-            "eventType": "task.completed",
-            "filter": {
-              "taskName": "Call to Schedule #2"
-            }
-          },
-          {
-            "eventType": "appointment.scheduled"
-          }
-        ]
-      },
-      "ResultPath": "$.event",
-      "Next": "WaitForContactOrScheduleRetry__Route",
-      "Comment": "Wait for the follow-up call task or direct appointment scheduling."
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateCallToScheduleTask"
     },
     "OnAppointmentScheduledEarly": {
       "Type": "Task",
@@ -358,6 +327,31 @@
         }
       },
       "ResultPath": "$.jobUpdate",
+      "Next": "CompleteBookSiteAttendanceTask"
+    },
+    "CompleteBookSiteAttendanceTask": {
+      "Type": "Task",
+      "Comment": "FIX-A5: Complete the Book Site Attendance task now that appointment is scheduled.",
+      "Resource": "tool.claims.update_task",
+      "Parameters": {
+        "params": {
+          "id.$": "$.bookSiteTask.id",
+          "data": {
+            "status": "Completed",
+            "relatedAppointmentId.$": "$.event.payload.appointmentId"
+          }
+        }
+      },
+      "ResultPath": "$.taskCompleteResult",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.taskCompleteError",
+          "Next": "CalculateSubmissionDueDate"
+        }
+      ],
       "Next": "CalculateSubmissionDueDate"
     },
     "CalculateSubmissionDueDate": {
@@ -493,7 +487,7 @@
     },
     "OnQuotePublished": {
       "Type": "Task",
-      "Comment": "Quote published. Set First/Last Submission Date, status -> Awaiting Review.",
+      "Comment": "FIX-A1/A3: Quote published for the first time. Set First and Last Submission Date. Status is NOT set here — it depends on auto-approval outcome.",
       "Resource": "tool.claims.update_job",
       "Parameters": {
         "params": {
@@ -501,8 +495,24 @@
           "data": {
             "customData": {
               "firstSubmissionDate.$": "$.event.payload.publishedAt",
-              "lastSubmissionDate.$": "$.event.payload.publishedAt",
-              "workflowPhase": "awaiting_review"
+              "lastSubmissionDate.$": "$.event.payload.publishedAt"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "EvaluateAutoApproval"
+    },
+    "OnQuoteRepublished": {
+      "Type": "Task",
+      "Comment": "FIX-A3: Quote republished after resubmission. Only update Last Submission Date (preserve First).",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "lastSubmissionDate.$": "$.event.payload.publishedAt"
             }
           }
         }
@@ -536,7 +546,24 @@
           "Next": "AutoApproveQuote"
         }
       ],
-      "Default": "WaitForQuoteOutcome"
+      "Default": "SetAwaitingReview"
+    },
+    "SetAwaitingReview": {
+      "Type": "Task",
+      "Comment": "FIX-A1: Auto-approval did not apply. Set status to Awaiting Review (BPMN only sets this on the NO path).",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "awaiting_review"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "WaitForQuoteOutcome"
     },
     "AutoApproveQuote": {
       "Type": "Task",
@@ -548,7 +575,19 @@
         }
       },
       "ResultPath": "$.approveResult",
-      "Next": "SpawnBuilderWorksJob"
+      "Next": "CheckQuoteValueForWorks"
+    },
+    "CheckQuoteValueForWorks": {
+      "Type": "Choice",
+      "Comment": "FIX-A2: BPMN guard — only spawn a Builder Works job if Quote Value > $0 AND status is Approved.",
+      "Choices": [
+        {
+          "Variable": "$.event.payload.quoteValue",
+          "NumericGreaterThan": 0,
+          "Next": "SpawnBuilderWorksJob"
+        }
+      ],
+      "Default": "WaitForInvoice"
     },
     "SpawnBuilderWorksJob": {
       "Type": "Task",
@@ -615,27 +654,9 @@
       "Comment": "Wait for insurer to review the quote."
     },
     "OnQuoteApproved": {
-      "Type": "Task",
-      "Comment": "Quote approved by insurer. Spawn Builder Works job.",
-      "Resource": "tool.claims.create_job",
-      "Parameters": {
-        "params": {
-          "data": {
-            "claimId.$": "$.claimId",
-            "jobTypeLookupId.$": "$.lookups.worksJobType",
-            "parentJobId.$": "$.jobId",
-            "collectExcess.$": "$.collectExcess",
-            "excess.$": "$.excess",
-            "customData": {
-              "workflowPhase": "allocated",
-              "claimRecommendation.$": "$.claimRecommendation",
-              "sourceAssessmentJobId.$": "$.jobId"
-            }
-          }
-        }
-      },
-      "ResultPath": "$.worksJob",
-      "Next": "WaitForInvoice"
+      "Type": "Pass",
+      "Comment": "FIX-A2: Quote approved by insurer. Route through value check before spawning Works (was incorrectly creating job unconditionally).",
+      "Next": "CheckQuoteValueForWorks"
     },
     "OnResubmissionRequired": {
       "Type": "Task",
@@ -680,7 +701,21 @@
         }
       },
       "ResultPath": "$.resubmissionTask",
-      "Next": "WaitForQuotePublished"
+      "Next": "WaitForQuoteRepublished"
+    },
+    "WaitForQuoteRepublished": {
+      "Type": "Task",
+      "Comment": "FIX-A3: Separate wait for republished quote so we only update Last Submission Date.",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.published"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuoteRepublished__Route"
     },
     "OnQuoteFinalOutcome": {
       "Type": "Task",
@@ -810,31 +845,6 @@
       ],
       "Default": "WaitForContactOrSchedule"
     },
-    "WaitForContactOrScheduleRetry__Route": {
-      "Type": "Choice",
-      "Comment": "Route resume payload for WaitForContactOrScheduleRetry",
-      "Choices": [
-        {
-          "And": [
-            {
-              "Variable": "$.event.eventType",
-              "StringEquals": "task.completed"
-            },
-            {
-              "Variable": "$.event.payload.taskName",
-              "StringEquals": "Call to Schedule #2"
-            }
-          ],
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "Variable": "$.event.eventType",
-          "StringEquals": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        }
-      ],
-      "Default": "WaitForContactOrScheduleRetry"
-    },
     "WaitForAppointmentScheduled__Route": {
       "Type": "Choice",
       "Comment": "Route resume payload for WaitForAppointmentScheduled",
@@ -887,6 +897,18 @@
         }
       ],
       "Default": "WaitForQuotePublished"
+    },
+    "WaitForQuoteRepublished__Route": {
+      "Type": "Choice",
+      "Comment": "FIX-A3: Route resume payload for WaitForQuoteRepublished",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "quote.published",
+          "Next": "OnQuoteRepublished"
+        }
+      ],
+      "Default": "WaitForQuoteRepublished"
     },
     "WaitForQuoteOutcome__Route": {
       "Type": "Choice",

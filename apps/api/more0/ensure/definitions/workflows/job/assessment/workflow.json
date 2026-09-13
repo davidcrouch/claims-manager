@@ -35,8 +35,21 @@
       "description": "Start and run the workflow synchronously until it waits or completes."
     }
   },
+  "dependencies": {
+    "tools": [
+      "tool.claims.update_job",
+      "tool.claims.create_task",
+      "tool.claims.update_task",
+      "tool.claims.create_job",
+      "tool.claims.calculate_dates",
+      "tool.claims.approve_quote"
+    ]
+  },
   "implementation": {
     "kind": "workflow-asl",
-    "entrypoint": "asl.json"
+    "entrypoint": "asl.json",
+    "execution": {
+      "kind": "workflow-engine"
+    }
   }
 }

@@ -1,6 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ClaimsApiClient } from '../server.js';
+import { toolError, toolResult } from '../server.js';
 import { proxyTool, pageLimit, dataBody } from './_proxy.js';
+import { categoryDesc } from '../categories.js';
 import { z } from 'zod';
 
 const CAT = 'operations' as const;
@@ -85,6 +87,56 @@ export function registerPurchaseOrdersTools(server: McpServer, api: ClaimsApiCli
     path: '/purchase-orders/capture',
     input: { data: dataBody },
   });
+
+  server.tool(
+    'cancel_purchase_order',
+    categoryDesc(
+      CAT,
+      'Cancel all purchase orders on a job. Sets status to Cancelled for every active PO.',
+    ),
+    {
+      jobId: z.string().describe('Job UUID'),
+    },
+    async ({ jobId }) => {
+      try {
+        const result = await api.request<Record<string, unknown>>(
+          `/purchase-orders/job/${jobId}`,
+        );
+        const orders = Array.isArray(result)
+          ? result
+          : Array.isArray((result as Record<string, unknown>).data)
+            ? ((result as Record<string, unknown>).data as Record<string, unknown>[])
+            : [];
+        const active = orders.filter(
+          (po: Record<string, unknown>) =>
+            po.status !== 'Cancelled' && po.status !== 'cancelled',
+        );
+        const cancelled: string[] = [];
+        const errors: string[] = [];
+        for (const po of active) {
+          try {
+            await api.request(`/purchase-orders/${po.id}`, {
+              method: 'POST',
+              body: { status: 'Cancelled' },
+            });
+            cancelled.push(po.id as string);
+          } catch (err) {
+            errors.push(
+              `${po.id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        return toolResult({
+          jobId,
+          totalActive: active.length,
+          cancelled: cancelled.length,
+          errors,
+        });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
 
   proxyTool(server, api, {
     category: CAT,

@@ -1285,3 +1285,13 @@
   Corrected task payload typing when updating task actions.
   API production type-check completes cleanly.
   Outcome: automated checks can proceed to image build and staging deploy.
+
+- `2026-09-13` `38ba5c0` **5 h**
+  `9 files | +611 −351 | Tier 3 complex | Heavy orchestration`
+  Lay summary: Builder job workflows now follow the insurer process diagrams more closely, and the system can cancel purchase orders, close leftover tasks, and check whether a job is finished.
+  **Aligned builder job workflows with process diagrams and added supporting tools.**
+  Assessment, make-safe, and works job flows updated so status and task steps match the agreed process maps.
+  Quote review only moves to awaiting review when auto-approval does not apply.
+  Works jobs wait for both completion certificate and purchase-order completion before closing.
+  Added tools to cancel purchase orders on a job, close all open tasks, and check terminal job status.
+  Workflow packaging updated so definitions publish cleanly through the standard gateway.

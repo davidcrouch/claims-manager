@@ -95,60 +95,24 @@
     },
     "OnCallToScheduleFailed": {
       "Type": "Task",
-      "Resource": "tool.claims.create_task",
+      "Comment": "FIX-M6: Contact attempt failed. Update Contact Date and loop back (BPMN shows loop, not a #2 task).",
+      "Resource": "tool.claims.update_job",
       "Parameters": {
         "params": {
+          "id.$": "$.jobId",
           "data": {
-            "name": "Call to Schedule #2",
-            "relatedEntityType": "Job",
-            "relatedEntityId.$": "$.jobId",
-            "jobId.$": "$.jobId",
-            "priority": "High",
-            "status": "Open",
-            "originType": "automation",
-            "action": {
-              "actionKey": "create_appointment",
-              "label": "Schedule appointment",
-              "context": {
-                "entityType": "Appointment",
-                "jobId.$": "$.jobId"
-              }
+            "customData": {
+              "contactDate.$": "$.event.payload.failedAt"
             }
           }
         }
       },
-      "ResultPath": "$.callToSchedule2Task",
-      "Next": "WaitForContactOrScheduleRetry"
-    },
-    "WaitForContactOrScheduleRetry": {
-      "Type": "Task",
-      "Resource": "states.waitForTaskToken",
-      "Parameters": {
-        "eventPatterns": [
-          {
-            "eventType": "task.completed",
-            "filter": {
-              "taskName": "Call to Schedule #2"
-            }
-          },
-          {
-            "eventType": "appointment.scheduled"
-          },
-          {
-            "eventType": "field.updated",
-            "filter": {
-              "field": "makeSafeRequired",
-              "value": false
-            }
-          }
-        ]
-      },
-      "ResultPath": "$.event",
-      "Next": "WaitForContactOrScheduleRetry__Route"
+      "ResultPath": "$.jobUpdate",
+      "Next": "CreateCallToScheduleTask"
     },
     "CancelMakeSafe": {
       "Type": "Task",
-      "Comment": "Make Safe Required set to No — cancel the job.",
+      "Comment": "FIX-M3: Make Safe Required set to No — cancel the job, cancel PO, and close all open tasks.",
       "Resource": "tool.claims.update_job",
       "Parameters": {
         "params": {
@@ -161,6 +125,44 @@
         }
       },
       "ResultPath": "$.jobUpdate",
+      "Next": "CancelMakeSafePO"
+    },
+    "CancelMakeSafePO": {
+      "Type": "Task",
+      "Comment": "FIX-M3: Cancel the PO (BPMN parallel: set status cancelled + update PO cancelled + close all tasks).",
+      "Resource": "tool.claims.cancel_purchase_order",
+      "Parameters": {
+        "params": {
+          "jobId.$": "$.jobId"
+        }
+      },
+      "ResultPath": "$.poCancel",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.poCancelError",
+          "Next": "CloseAllOpenTasks"
+        }
+      ],
+      "Next": "CloseAllOpenTasks"
+    },
+    "CloseAllOpenTasks": {
+      "Type": "Task",
+      "Comment": "FIX-M3: Close all open tasks on the cancelled Make Safe job.",
+      "Resource": "tool.claims.close_all_tasks",
+      "Parameters": {
+        "params": {
+          "jobId.$": "$.jobId"
+        }
+      },
+      "ResultPath": "$.taskCloseAll",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.taskCloseAllError",
+          "Next": "MakeSafeCancelled"
+        }
+      ],
       "Next": "MakeSafeCancelled"
     },
     "MakeSafeCancelled": {
@@ -322,6 +324,29 @@
         }
       },
       "ResultPath": "$.jobUpdate",
+      "Next": "CompleteBookSiteAttendanceTask"
+    },
+    "CompleteBookSiteAttendanceTask": {
+      "Type": "Task",
+      "Comment": "FIX-M7: Complete the Book Site Attendance task now that appointment is scheduled.",
+      "Resource": "tool.claims.update_task",
+      "Parameters": {
+        "params": {
+          "id.$": "$.bookSiteTask.id",
+          "data": {
+            "status": "Completed",
+            "relatedAppointmentId.$": "$.event.payload.appointmentId"
+          }
+        }
+      },
+      "ResultPath": "$.taskCompleteResult",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.taskCompleteError",
+          "Next": "CalculateSubmissionDueDate"
+        }
+      ],
       "Next": "CalculateSubmissionDueDate"
     },
     "CalculateSubmissionDueDate": {
@@ -431,19 +456,13 @@
       "Next": "WaitForQuotePublished__Route"
     },
     "OnQuotePublished": {
-      "Type": "Task",
-      "Resource": "tool.claims.update_job",
-      "Parameters": {
-        "params": {
-          "id.$": "$.jobId",
-          "data": {
-            "customData": {
-              "workflowPhase": "awaiting_review"
-            }
-          }
-        }
-      },
-      "ResultPath": "$.jobUpdate",
+      "Type": "Pass",
+      "Comment": "FIX-M1: Quote published. Route to auto-approval check — do NOT set Awaiting Review here (BPMN only sets it on NO path).",
+      "Next": "EvaluateAutoApproval"
+    },
+    "OnQuoteRepublished": {
+      "Type": "Pass",
+      "Comment": "Quote republished after resubmission. Route to auto-approval check.",
       "Next": "EvaluateAutoApproval"
     },
     "EvaluateAutoApproval": {
@@ -471,7 +490,24 @@
           "Next": "AutoApproveAndCreatePO"
         }
       ],
-      "Default": "WaitForQuoteOutcome"
+      "Default": "SetAwaitingReview"
+    },
+    "SetAwaitingReview": {
+      "Type": "Task",
+      "Comment": "FIX-M1: Auto-approval did not apply. Set status to Awaiting Review (BPMN only sets this on NO path).",
+      "Resource": "tool.claims.update_job",
+      "Parameters": {
+        "params": {
+          "id.$": "$.jobId",
+          "data": {
+            "customData": {
+              "workflowPhase": "awaiting_review"
+            }
+          }
+        }
+      },
+      "ResultPath": "$.jobUpdate",
+      "Next": "WaitForQuoteOutcome"
     },
     "AutoApproveAndCreatePO": {
       "Type": "Task",
@@ -499,6 +535,12 @@
             "eventType": "quote.status_changed",
             "filter": {
               "newStatus": "Resubmission Required"
+            }
+          },
+          {
+            "eventType": "quote.status_changed",
+            "filter": {
+              "newStatus": "Cash Settled"
             }
           },
           {
@@ -560,7 +602,21 @@
         }
       },
       "ResultPath": "$.resubmissionTask",
-      "Next": "WaitForQuotePublished"
+      "Next": "WaitForQuoteRepublished"
+    },
+    "WaitForQuoteRepublished": {
+      "Type": "Task",
+      "Comment": "Wait for the revised quote to be published after resubmission.",
+      "Resource": "states.waitForTaskToken",
+      "Parameters": {
+        "eventPatterns": [
+          {
+            "eventType": "quote.published"
+          }
+        ]
+      },
+      "ResultPath": "$.event",
+      "Next": "WaitForQuoteRepublished__Route"
     },
     "WaitForCompletionAndInvoice": {
       "Type": "Task",
@@ -697,48 +753,6 @@
       ],
       "Default": "WaitForContactOrSchedule"
     },
-    "WaitForContactOrScheduleRetry__Route": {
-      "Type": "Choice",
-      "Comment": "Route resume payload for WaitForContactOrScheduleRetry",
-      "Choices": [
-        {
-          "And": [
-            {
-              "Variable": "$.event.eventType",
-              "StringEquals": "task.completed"
-            },
-            {
-              "Variable": "$.event.payload.taskName",
-              "StringEquals": "Call to Schedule #2"
-            }
-          ],
-          "Next": "OnCustomerContacted"
-        },
-        {
-          "Variable": "$.event.eventType",
-          "StringEquals": "appointment.scheduled",
-          "Next": "OnAppointmentScheduledEarly"
-        },
-        {
-          "And": [
-            {
-              "Variable": "$.event.eventType",
-              "StringEquals": "field.updated"
-            },
-            {
-              "Variable": "$.event.payload.field",
-              "StringEquals": "makeSafeRequired"
-            },
-            {
-              "Variable": "$.event.payload.value",
-              "BooleanEquals": false
-            }
-          ],
-          "Next": "CancelMakeSafe"
-        }
-      ],
-      "Default": "WaitForContactOrScheduleRetry"
-    },
     "WaitForAppointmentScheduled__Route": {
       "Type": "Choice",
       "Comment": "Route resume payload for WaitForAppointmentScheduled",
@@ -809,6 +823,18 @@
       ],
       "Default": "WaitForQuotePublished"
     },
+    "WaitForQuoteRepublished__Route": {
+      "Type": "Choice",
+      "Comment": "Route resume payload for WaitForQuoteRepublished",
+      "Choices": [
+        {
+          "Variable": "$.event.eventType",
+          "StringEquals": "quote.published",
+          "Next": "OnQuoteRepublished"
+        }
+      ],
+      "Default": "WaitForQuoteRepublished"
+    },
     "WaitForQuoteOutcome__Route": {
       "Type": "Choice",
       "Comment": "Route resume payload for WaitForQuoteOutcome",
@@ -838,6 +864,19 @@
             }
           ],
           "Next": "OnResubmissionRequired"
+        },
+        {
+          "And": [
+            {
+              "Variable": "$.event.eventType",
+              "StringEquals": "quote.status_changed"
+            },
+            {
+              "Variable": "$.event.payload.newStatus",
+              "StringEquals": "Cash Settled"
+            }
+          ],
+          "Next": "JobFinalOutcome"
         },
         {
           "And": [

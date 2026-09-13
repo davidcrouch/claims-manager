@@ -168,4 +168,54 @@ export function registerTasksTools(server: McpServer, api: ClaimsApiClient): voi
       }
     },
   );
+
+  server.tool(
+    'close_all_tasks',
+    categoryDesc(
+      CAT,
+      'Close all open tasks on a job. Sets status to Closed for every task with status Open.',
+    ),
+    {
+      jobId: z.string().describe('Job UUID'),
+    },
+    async ({ jobId }) => {
+      try {
+        const result = await api.request<Record<string, unknown>>(
+          `/tasks/job/${jobId}`,
+        );
+        const tasks = Array.isArray(result)
+          ? result
+          : Array.isArray((result as Record<string, unknown>).data)
+            ? ((result as Record<string, unknown>).data as Record<string, unknown>[])
+            : [];
+        const openTasks = tasks.filter(
+          (t: Record<string, unknown>) =>
+            t.status === 'Open' || t.status === 'open',
+        );
+        const closed: string[] = [];
+        const errors: string[] = [];
+        for (const task of openTasks) {
+          try {
+            await api.request(`/tasks/${task.id}`, {
+              method: 'POST',
+              body: { status: 'Closed' },
+            });
+            closed.push(task.id as string);
+          } catch (err) {
+            errors.push(
+              `${task.id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        return toolResult({
+          jobId,
+          totalOpen: openTasks.length,
+          closed: closed.length,
+          errors,
+        });
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
 }
