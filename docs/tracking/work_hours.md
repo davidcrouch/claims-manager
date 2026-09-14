@@ -1314,7 +1314,7 @@
   Allowed optional extra document IDs on purchase-order and RFQ send requests in the typed client.
   Frontend production build type-check completes cleanly.
   Outcome: automated checks can proceed to image build and staging deploy.
-- `2026-09-15` `PENDING` **0.5 h**
+- `2026-09-15` `2a42b7b` **0.5 h**
   `1 file | +22 -4 | Tier 2 standard | Light orchestration`
   Lay summary: Build checks pass again after updating automated tests to match how quote republish works.
   **Test fix so the release can deploy.**
