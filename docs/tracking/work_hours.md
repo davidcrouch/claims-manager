@@ -1,4 +1,4 @@
-﻿ÃƒÂ¯Ã‚Â»Ã‚Â¿# Work hours tracking
+ÃƒÂ¯Ã‚Â»Ã‚Â¿# Work hours tracking
 
 ## Entries
 
@@ -1296,7 +1296,7 @@
   Added tools to cancel purchase orders on a job, close all open tasks, and check terminal job status.
   Workflow packaging updated so definitions publish cleanly through the standard gateway.
 
-- `2026-09-15` `6461919` **5 h**
+- `2026-09-15` `b5d9c5e` **5 h**
   `142 files | +5685 -227 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can create estimate variations, send job messages more reliably, and work through a large set of day-to-day fixes across quotes, purchase orders, journals, and the help assistant.
   **Quote variations, messaging fixes, and staging feedback cleanup.**
