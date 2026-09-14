@@ -149,10 +149,11 @@ export function CrunchworkConnectionEditForm({
             type="url"
             value={docsUrl}
             onChange={(e) => setDocsUrl(e.target.value)}
-            placeholder="https://staging-iag.crunchwork.com/swagger-ui/index.html"
+            placeholder="https://staging-iag.crunchwork.com/rest/insurance-rest/v3/api-docs"
           />
           <p className="text-xs text-slate-400">
-            URL for the provider API documentation portal.
+            Prefer an OpenAPI JSON URL (e.g. …/v3/api-docs). HTML swagger-ui
+            portals are opened externally.
           </p>
         </div>
 

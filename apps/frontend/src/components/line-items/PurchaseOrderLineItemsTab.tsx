@@ -97,6 +97,7 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
     hideToolbarActions?: boolean;
     onUndoCapture?: (restoreEdits: PoLineItemEdits) => void;
     onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+    onEditingChange?: (editing: boolean) => void;
   },
   ref: Ref<PurchaseOrderLineItemsTabHandle>,
 ) {
@@ -129,6 +130,7 @@ const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsE
     hideToolbarActions = false,
     onUndoCapture,
     onSaveStateChange,
+    onEditingChange,
   }: {
     purchaseOrder: PurchaseOrder;
     drawerOpen: boolean;
@@ -139,6 +141,7 @@ const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsE
     hideToolbarActions?: boolean;
     onUndoCapture?: (restoreEdits: PoLineItemEdits) => void;
     onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+    onEditingChange?: (editing: boolean) => void;
   },
   ref: Ref<PurchaseOrderLineItemsTabHandle>,
 ) {
@@ -157,8 +160,16 @@ const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsE
   const skipUndoRef = useRef(false);
   const onUndoCaptureRef = useRef(onUndoCapture);
   const onSaveStateChangeRef = useRef(onSaveStateChange);
+  const onEditingChangeRef = useRef(onEditingChange);
   onUndoCaptureRef.current = onUndoCapture;
   onSaveStateChangeRef.current = onSaveStateChange;
+  onEditingChangeRef.current = onEditingChange;
+
+  const isEditingRef = useRef(false);
+  const handleEditingChange = useCallback((editing: boolean) => {
+    isEditingRef.current = editing;
+    onEditingChangeRef.current?.(editing);
+  }, []);
 
   const canSetCatalogUpdateMode = useCanUpdateCatalogFromEstimate();
   const [catalogUpdateMode, setCatalogUpdateModeState] = useState<CatalogUpdateMode>('none');
@@ -702,7 +713,9 @@ const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsE
         setStructurallyDirty(false);
         onSaveStateChangeRef.current?.('saved');
         await loadLineItems();
-        setResetEditsKey((k) => k + 1);
+        if (!isEditingRef.current) {
+          setResetEditsKey((k) => k + 1);
+        }
       });
     },
     [purchaseOrder.id, dbGroups, loadLineItems, applyCatalogUpdates],
@@ -807,6 +820,7 @@ const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsE
         catalogUpdateMode={catalogUpdateMode}
         onCatalogUpdateModeChange={setCatalogUpdateMode}
         canSetCatalogUpdateMode={canSetCatalogUpdateMode}
+        onEditingChange={handleEditingChange}
       >
         <LineItemsTable hideToolbarActions={hideToolbarActions} />
       </LineItemsProvider>

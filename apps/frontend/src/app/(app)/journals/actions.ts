@@ -88,3 +88,25 @@ export async function unlinkJournalAction(
   await api.unlinkJournalFromEntity(journalId, entityType, entityId);
   return true;
 }
+
+export async function updateJournalAction(
+  journalId: string,
+  data: {
+    name?: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.updateJournal(journalId, data);
+    return { success: true };
+  } catch (err) {
+    console.error('[journals/actions.updateJournalAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update journal',
+    };
+  }
+}

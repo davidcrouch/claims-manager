@@ -52,7 +52,16 @@ export class LookupResolutionService {
       .where(and(...conditions))
       .limit(1);
 
-    if (existing) return existing.id;
+    if (existing) {
+      const nextName = params.name?.trim();
+      if (nextName && nextName !== (existing.name ?? '').trim()) {
+        await db
+          .update(lookupValues)
+          .set({ name: nextName })
+          .where(eq(lookupValues.id, existing.id));
+      }
+      return existing.id;
+    }
 
     if (params.autoCreate) {
       this.logger.debug(

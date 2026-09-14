@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import {
   DefRow,
   SectionCard,
@@ -167,7 +168,8 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
   ref: Ref<QuoteOverviewTabHandle>,
 ) {
   const approval = getApprovalInfo(quote);
-  const statusName = quote.status?.name ?? approval.statusName ?? 'Unknown';
+  // Prefer CW status.name (approvalInfo / apiPayload), then lookup name.
+  const statusName = approval.statusName ?? quote.status?.name ?? null;
   const custom = (quote.customData as Dict | undefined) ?? {};
   const insurerRef = asString(pick(custom, 'cwExternalReference'));
   const cwCreated = asString(pick(custom, 'cwCreatedAtDate'));
@@ -324,7 +326,6 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
           {caps.estimate.insurerRef.visible && insurerRef && (
             <DefRow label="Insurer reference" value={insurerRef} />
           )}
-          <DefRow label="Status type" value={approval.statusType ?? '—'} />
           <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
           <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
           {cwCreated && (
@@ -455,7 +456,22 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
             label="Auto-approved"
             value={<BoolPill value={autoApproved} />}
           />
-          <DefRow label="Status name" value={approval.statusName ?? '—'} />
+          <DefRow
+            label="Status"
+            value={
+              statusName ? <StatusBadge status={statusName} /> : '—'
+            }
+          />
+          <DefRow
+            label="Status type"
+            value={
+              approval.statusType ? (
+                <StatusBadge status={approval.statusType} />
+              ) : (
+                '—'
+              )
+            }
+          />
           <DefRow
             label="Estimate type"
             value={
@@ -513,7 +529,7 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
         </SectionCard>
       </div>
 
-      {quote.externalReference && statusName !== 'Draft' && (
+      {quote.externalReference && statusName && statusName !== 'Draft' && (
         <InsurerReviewCard quote={quote} statusName={statusName} />
       )}
 

@@ -31,6 +31,8 @@ export interface BottomFormDrawerProps {
   companionChatOpen?: boolean;
   /** Block Escape, backdrop click, and the header close button (e.g. while creating). */
   preventClose?: boolean;
+  /** Called when user forces a close during preventClose (e.g. cancel while uploading). */
+  onForceClose?: () => void;
 }
 
 export function BottomFormDrawer({
@@ -45,6 +47,7 @@ export function BottomFormDrawer({
   onAIAssist,
   companionChatOpen = false,
   preventClose = false,
+  onForceClose,
 }: BottomFormDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const reactId = useId();
@@ -67,7 +70,13 @@ export function BottomFormDrawer({
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !preventClose) onOpenChange(false);
+      if (e.key === 'Escape') {
+        if (preventClose) {
+          onForceClose?.();
+        } else {
+          onOpenChange(false);
+        }
+      }
     };
     document.addEventListener('keydown', handleKey);
     const prevOverflow = document.body.style.overflow;
@@ -76,7 +85,7 @@ export function BottomFormDrawer({
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onOpenChange, preventClose]);
+  }, [open, onOpenChange, preventClose, onForceClose]);
 
   if (!mounted) return null;
 
@@ -154,11 +163,14 @@ export function BottomFormDrawer({
                 <button
                   type="button"
                   onClick={() => {
-                    if (!preventClose) onOpenChange(false);
+                    if (preventClose) {
+                      onForceClose?.();
+                    } else {
+                      onOpenChange(false);
+                    }
                   }}
                   aria-label="Close"
-                  disabled={preventClose}
-                  className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:pointer-events-none disabled:opacity-40"
+                  className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                 >
                   <X className="h-5 w-5" />
                 </button>

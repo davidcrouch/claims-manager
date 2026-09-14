@@ -56,6 +56,7 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'quote_status', name: 'Draft', ref: 'quote-status-draft' },
   { domain: 'quote_status', name: 'Pending', ref: 'quote-status-pending' },
   { domain: 'quote_status', name: 'Approved', ref: 'quote-status-approved' },
+  { domain: 'quote_status', name: 'Resubmission Required', ref: 'quote-status-resubmission-required' },
   { domain: 'quote_status', name: 'Archived', ref: 'quote-status-archived' },
   { domain: 'line_scope_status', name: 'Pending', ref: 'line-scope-pending' },
   { domain: 'line_scope_status', name: 'Accepted', ref: 'line-scope-accepted' },

@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and, asc, isNull } from 'drizzle-orm';
+import { eq, and, asc, isNull, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import {
   purchaseOrders,
@@ -43,24 +43,37 @@ export class PurchaseOrderMapper implements DataMapper {
       )
       .orderBy(asc(purchaseOrderGroups.sortIndex));
 
-    const combos = await this.db
-      .select()
-      .from(purchaseOrderCombos)
-      .where(
-        and(
-          eq(purchaseOrderCombos.tenantId, params.tenantId),
-          isNull(purchaseOrderCombos.deletedAt),
-        ),
-      )
-      .orderBy(asc(purchaseOrderCombos.sortIndex));
+    const groupIds = groups.map((group) => group.id);
 
-    const items = await this.db
-      .select()
-      .from(purchaseOrderItems)
-      .where(
-        and(eq(purchaseOrderItems.tenantId, params.tenantId), isNull(purchaseOrderItems.deletedAt)),
-      )
-      .orderBy(asc(purchaseOrderItems.sortIndex));
+    const combos =
+      groupIds.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(purchaseOrderCombos)
+            .where(
+              and(
+                eq(purchaseOrderCombos.tenantId, params.tenantId),
+                inArray(purchaseOrderCombos.purchaseOrderGroupId, groupIds),
+                isNull(purchaseOrderCombos.deletedAt),
+              ),
+            )
+            .orderBy(asc(purchaseOrderCombos.sortIndex));
+
+    const items =
+      groupIds.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(purchaseOrderItems)
+            .where(
+              and(
+                eq(purchaseOrderItems.tenantId, params.tenantId),
+                inArray(purchaseOrderItems.purchaseOrderGroupId, groupIds),
+                isNull(purchaseOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(asc(purchaseOrderItems.sortIndex));
 
     const poTo = po.poTo as Record<string, unknown>;
     const poFrom = po.poFrom as Record<string, unknown>;

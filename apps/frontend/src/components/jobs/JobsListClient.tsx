@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Briefcase, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useRememberListUrl } from '@/components/layout/BackButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { ProviderBadge } from '@/components/ui/provider-badge';
@@ -149,6 +150,8 @@ export function JobsListClient({
   const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useRememberListUrl('/jobs');
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
     initialFetchKey,
   });

@@ -204,6 +204,10 @@ module "cloud_run_api" {
       : "${local.auth_run_url}/jwks"
     )
     AUTH_AUDIENCE = local.oidc_audience
+    MESSAGE_ACKNOWLEDGE_ENABLED = "true"
+    # RFQ/PO/feedback outbound email (api EmailService). Without these, provider falls back to console.
+    EMAIL_PROVIDER = "resend"
+    EMAIL_FROM     = "noreply@branlamie.com"
   }
 
   secret_env_vars = [
@@ -212,6 +216,7 @@ module "cloud_run_api" {
     { name = "INTERNAL_API_TOKEN", secret = "internal-api-token" },
     { name = "MORE0_API_KEY", secret = "more0-api-key" },
     { name = "MORE0_TOOL_SECRET", secret = "more0-tool-secret" },
+    { name = "RESEND_API_KEY", secret = "resend-api-key" },
   ]
 
   depends_on = [

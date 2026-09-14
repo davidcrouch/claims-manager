@@ -113,14 +113,31 @@ export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
     const cwClaimId = claimNested ? asString(claimNested.id) : asString(payload.claimId);
     if (cwClaimId) parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false, nestedPayload: claimNested });
 
-    // Lookups
+    // Lookups — pass status.name / quoteType.name so auto-created lookups show CW labels
+    // (e.g. "Resubmission Required") rather than opaque ids (Insurance REST API §3.3.6).
     if (isPlainObject(payload.status)) {
       const extRef = asString(payload.status.externalReference) ?? asString(payload.status.id);
-      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'quote_status', externalReference: extRef, autoCreate: true });
+      if (extRef) {
+        lookups.push({
+          field: 'statusLookupId',
+          domain: 'quote_status',
+          externalReference: extRef,
+          name: asString(payload.status.name),
+          autoCreate: true,
+        });
+      }
     }
     if (isPlainObject(payload.quoteType)) {
       const extRef = asString(payload.quoteType.externalReference) ?? asString(payload.quoteType.id);
-      if (extRef) lookups.push({ field: 'quoteTypeLookupId', domain: 'quote_type', externalReference: extRef, autoCreate: true });
+      if (extRef) {
+        lookups.push({
+          field: 'quoteTypeLookupId',
+          domain: 'quote_type',
+          externalReference: extRef,
+          name: asString(payload.quoteType.name),
+          autoCreate: true,
+        });
+      }
     }
 
     return { entity, lookups, parentRefs };

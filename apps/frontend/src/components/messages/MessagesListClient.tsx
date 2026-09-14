@@ -676,7 +676,7 @@ export function MessagesListClient({
             if (!open) void load();
           }}
           jobId={job?.id || fetchJobId || undefined}
-          claimId={parentClaim?.id ?? job?.claimId ?? undefined}
+          claimId={job?.parentClaimId ?? parentClaim?.id ?? job?.claimId ?? undefined}
         />
       )}
       {jobInContext && (

@@ -413,14 +413,16 @@ export async function reorderPurchaseOrderLineItemsAction(params: {
   purchaseOrderId: string;
   items?: Array<{ id: string; sortIndex: number }>;
   combos?: Array<{ id: string; sortIndex: number }>;
+  scopes?: Array<{ id: string; sortIndex: number }>;
 }): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
+    const mergedCombos = [...(params.combos ?? []), ...(params.scopes ?? [])];
     await api.reorderPurchaseOrderLineItems(params.purchaseOrderId, {
       items: params.items,
-      combos: params.combos,
+      combos: mergedCombos.length > 0 ? mergedCombos : undefined,
     });
     revalidatePath(`/purchase-orders/${params.purchaseOrderId}`);
     return { success: true };

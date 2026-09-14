@@ -140,6 +140,16 @@ export class QuotesController {
     return this.quotesService.approve({ id, userId });
   }
 
+  @Post(':id/variations')
+  @RequirePermission(P.procurement.manage)
+  async createVariation(
+    @Param('id') id: string,
+    @Body() body: { reasonForVariation?: string; quoteType?: string },
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.quotesService.createVariation({ id, userId, body });
+  }
+
   @Post(':id/incorporate-proposal-pricing')
   @RequirePermission(P.procurement.manage)
   async incorporateProposalPricing(

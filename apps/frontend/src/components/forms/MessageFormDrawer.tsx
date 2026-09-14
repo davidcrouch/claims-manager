@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
@@ -32,7 +31,7 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
-import { createMessageAction } from '@/app/(app)/jobs/[id]/actions';
+import { useApiClient } from '@/hooks/useApiClient';
 import { cn } from '@/lib/utils';
 
 /** Keep in sync with apps/api/src/modules/messages/message-subjects.ts */
@@ -61,9 +60,9 @@ type MessageFormValues = z.infer<typeof messageFormSchema>;
 export interface MessageFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Job-scoped send (CW fromJobId/toJobId). */
+  /** Job-scoped send (CW fromJobId). Backend derives toClaimId from job.parentClaimId. */
   jobId?: string | null;
-  /** Also send matching claim pair (CW fromClaimId/toClaimId) when known. */
+  /** Claim-scoped send when no job (CW fromClaimId/toClaimId). */
   claimId?: string | null;
 }
 
@@ -131,7 +130,7 @@ export function MessageFormDrawer({
   jobId,
   claimId,
 }: MessageFormDrawerProps) {
-  const router = useRouter();
+  const api = useApiClient();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,12 +185,8 @@ export function MessageFormDrawer({
         acknowledgementRequired: values.acknowledgementRequired,
       };
       if (jobId) {
+        // Backend resolves CW toClaimId from the job's parentClaimId (cwParentClaimId).
         payload.fromJobId = jobId;
-        payload.toJobId = jobId;
-        if (claimId) {
-          payload.fromClaimId = claimId;
-          payload.toClaimId = claimId;
-        }
       } else if (claimId) {
         payload.fromClaimId = claimId;
         payload.toClaimId = claimId;
@@ -200,14 +195,13 @@ export function MessageFormDrawer({
         setSubmitting(false);
         return;
       }
-      const result = await createMessageAction(payload);
-      if (result.success) {
+      const result = await api.createMessage(payload);
+      if (result) {
         onOpenChange(false);
         form.reset({ subject: undefined, acknowledgementRequired: false });
         editor?.commands.clearContent();
-        router.refresh();
       } else {
-        setError(result.error ?? 'Failed to send message');
+        setError('Failed to send message');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');

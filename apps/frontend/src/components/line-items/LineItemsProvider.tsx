@@ -200,6 +200,8 @@ export interface LineItemsProviderProps {
   catalogUpdateMode?: CatalogUpdateMode;
   onCatalogUpdateModeChange?: (mode: CatalogUpdateMode) => void;
   canSetCatalogUpdateMode?: boolean;
+  /** Fires when a line-item cell gains or loses focus (editState null ↔ non-null). */
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export function LineItemsProvider({
@@ -230,6 +232,7 @@ export function LineItemsProvider({
   catalogUpdateMode = 'none',
   onCatalogUpdateModeChange,
   canSetCatalogUpdateMode = false,
+  onEditingChange,
 }: LineItemsProviderProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
   const isReadOnly =
@@ -297,6 +300,18 @@ export function LineItemsProvider({
     selectedRows,
     setSelectedRows,
   });
+
+  // Notify parent when a cell gains or loses focus
+  const onEditingChangeRef = useRef(onEditingChange);
+  onEditingChangeRef.current = onEditingChange;
+  const prevEditingRef = useRef(false);
+  useEffect(() => {
+    const isEditing = editState !== null;
+    if (isEditing !== prevEditingRef.current) {
+      prevEditingRef.current = isEditing;
+      onEditingChangeRef.current?.(isEditing);
+    }
+  }, [editState]);
 
   // Reset edits when resetEditsKey changes
   const prevResetKey = useRef(resetEditsKey);

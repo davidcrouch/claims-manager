@@ -75,6 +75,7 @@ const EMPTY_OVERVIEW: JobOverviewDraft = {
   attendanceDate: '',
   estimatedStartDate: '',
   estimatedCompletionDate: '',
+  claimRecommendation: '',
   statusLookupId: '',
   statusExternalReference: '',
   jobInstructions: '',
@@ -479,6 +480,15 @@ export function JobDetail({
     Boolean(claimId) &&
     Boolean(makeSafeJobType?.id) &&
     !isAlreadyMakeSafe;
+  const makeSafeUnavailableReason = !canCreateMakeSafe
+    ? isAlreadyMakeSafe
+      ? 'This job is already a Make-Safe job'
+      : !claimId
+        ? 'No claim is linked to this job'
+        : !makeSafeJobType?.id
+          ? 'No Builder Make Safe job type is configured'
+          : null
+    : null;
   const existingContacts = (
     ((job.apiPayload as Record<string, unknown> | undefined)?.contacts as
       | Array<{
@@ -555,11 +565,12 @@ export function JobDetail({
     tabActions = (
       <Button
         size="default"
+        variant="outline"
         onClick={() => setReportDrawerOpen(true)}
-        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        className="h-9 gap-1.5 px-4"
       >
-        <Plus className="h-3.5 w-3.5" />
-        Add Report
+        <FileBarChart className="h-3.5 w-3.5" />
+        Report Creation Unavailable
       </Button>
     );
   }
@@ -574,17 +585,24 @@ export function JobDetail({
         >
           Go to Make-Safe
         </Button>
-      ) : (
-        canCreateMakeSafe && (
-          <Button
-            size="default"
-            onClick={() => setMakeSafeDrawerOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-          >
-            Create Make-Safe
-          </Button>
-        )
-      )}
+      ) : canCreateMakeSafe ? (
+        <Button
+          size="default"
+          onClick={() => setMakeSafeDrawerOpen(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Make-Safe
+        </Button>
+      ) : !isAlreadyMakeSafe && !existingMakeSafeJobId ? (
+        <Button
+          size="default"
+          disabled
+          title={makeSafeUnavailableReason ?? 'Create Make-Safe is unavailable'}
+          className="h-9 gap-1.5 px-4"
+        >
+          Create Make-Safe
+        </Button>
+      ) : null}
       <Button
         size="default"
         onClick={() => setEstimateDrawerOpen(true)}

@@ -469,6 +469,20 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       this.logger.log(
         `CrunchworkOutboundAdapter.pushQuote — skipping create for ${entityId}, updating existing CW quote ${cwQuoteId}`,
       );
+      const createBody =
+        payload.createBody && typeof payload.createBody === 'object' && !Array.isArray(payload.createBody)
+          ? (payload.createBody as Record<string, unknown>)
+          : null;
+      if (createBody && Object.keys(createBody).length > 0) {
+        this.logger.log(
+          `CrunchworkOutboundAdapter.pushQuote — applying content update before status for ${entityId} cwQuoteId=${cwQuoteId}`,
+        );
+        await this.crunchwork.updateQuote({
+          connectionId,
+          quoteId: cwQuoteId,
+          body: createBody,
+        });
+      }
       const updateResponse = await this.crunchwork.updateQuote({
         connectionId,
         quoteId: cwQuoteId,

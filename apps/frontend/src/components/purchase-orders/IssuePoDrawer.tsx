@@ -34,6 +34,7 @@ import {
   type JobContactRef,
 } from '@/components/forms/JobContactsPicker';
 import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
+import { ProjectDocumentsPickerDrawer } from '@/components/documents/ProjectDocumentsPickerDrawer';
 import { createPoIssueRequestAction } from '@/app/(app)/purchase-orders/actions';
 import type { Contact } from '@/types/api';
 
@@ -123,6 +124,8 @@ export function IssuePoDrawer({
   const [subject, setSubject] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [additionalDocIds, setAdditionalDocIds] = useState<string[]>([]);
+  const [docPickerOpen, setDocPickerOpen] = useState(false);
 
   const openRef = useRef(open);
   openRef.current = open;
@@ -156,6 +159,8 @@ export function IssuePoDrawer({
       setSubject('');
       setSubmitting(false);
       setError(null);
+      setAdditionalDocIds([]);
+      setDocPickerOpen(false);
       resetDocumentState();
       return;
     }
@@ -351,6 +356,7 @@ export function IssuePoDrawer({
         })),
         generatedDocumentId: generatedDocId!,
         emailSubject: subject,
+        additionalDocumentIds: additionalDocIds.length > 0 ? additionalDocIds : undefined,
       });
       if (result.success) {
         toast.success(`Issuing PO to ${recipientsWithEmail.length} recipient${recipientsWithEmail.length === 1 ? '' : 's'}…`);
@@ -450,6 +456,9 @@ export function IssuePoDrawer({
                 recipients={recipientsWithEmail}
                 poNumber={poNumber}
                 docFormat={docFormat}
+                jobId={jobId}
+                additionalDocIds={additionalDocIds}
+                onPickDocuments={() => setDocPickerOpen(true)}
               />
             )}
             <BottomFormDrawerError error={error} />
@@ -532,6 +541,20 @@ export function IssuePoDrawer({
         onSuccess={handleContactCreated}
         defaultTypeRef="contact-type-vendor"
       />
+      {jobId && (
+        <ProjectDocumentsPickerDrawer
+          open={docPickerOpen}
+          onOpenChange={setDocPickerOpen}
+          jobId={jobId}
+          relatedRecordType="PurchaseOrder"
+          onConfirm={async ({ documentIds }) => {
+            setAdditionalDocIds((prev) => [
+              ...prev,
+              ...documentIds.filter((id) => !prev.includes(id)),
+            ]);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -757,12 +780,18 @@ function StepEmailPreview({
   recipients,
   poNumber,
   docFormat,
+  jobId,
+  additionalDocIds,
+  onPickDocuments,
 }: {
   subject: string;
   onSubjectChange: (s: string) => void;
   recipients: JobContactRef[];
   poNumber?: string | null;
   docFormat: DocFormat;
+  jobId?: string | null;
+  additionalDocIds: string[];
+  onPickDocuments: () => void;
 }) {
   const attachmentName = `PO${poNumber ? `-${poNumber}` : ''}.${docFormat === 'pdf' ? 'pdf' : 'docx'}`;
 
@@ -826,11 +855,28 @@ function StepEmailPreview({
 
       {/* Attachment */}
       <div className="space-y-2">
-        <Label>Attachment</Label>
+        <Label>Attachments</Label>
         <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
           <Paperclip className="h-4 w-4 text-slate-400" />
           <span className="text-slate-700">{attachmentName}</span>
         </div>
+        {additionalDocIds.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            + {additionalDocIds.length} additional document{additionalDocIds.length === 1 ? '' : 's'} from project files
+          </p>
+        )}
+        {jobId && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onPickDocuments}
+            className="gap-1.5"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            Attach Job Documents
+          </Button>
+        )}
       </div>
     </div>
   );

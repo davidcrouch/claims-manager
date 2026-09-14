@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { archiveEntityAction, type ArchiveEntityType } from '@/app/(app)/mutations-archive';
-import { isArchivedStatus } from '@/components/shared/archive-list';
 
 const ENTITY_LABELS: Record<ArchiveEntityType, string> = {
   job: 'job',
@@ -57,7 +56,9 @@ export function ArchiveEntityButton({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  if (isArchivedStatus(statusName)) {
+  // Only hide when the record is truly in "archived" status.
+  // Insurer "Closed" statuses should not prevent archiving.
+  if (statusName && statusName.trim().toLowerCase() === 'archived') {
     return null;
   }
 
@@ -88,11 +89,11 @@ export function ArchiveEntityButton({
   return (
     <>
       <Button
-        size="icon-lg"
+        size="lg"
         onClick={() => setOpen(true)}
         disabled={isPending}
         className={cn(
-          'bg-red-600 text-white hover:bg-red-500 hover:text-white',
+          'gap-1.5 bg-red-600 text-white hover:bg-red-500 hover:text-white',
           className,
         )}
         title={`Archive ${noun}`}
@@ -103,6 +104,7 @@ export function ArchiveEntityButton({
         ) : (
           <Trash2 className="h-4 w-4" />
         )}
+        Archive
       </Button>
 
       <Dialog

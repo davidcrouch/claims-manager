@@ -189,11 +189,36 @@ export class WorkOrdersService {
     body: Record<string, unknown>;
     userId?: string;
   }) {
-    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    const tenantId = this.tenantContext.getTenantId();
+    const {
+      createdByUserId: _c,
+      updatedByUserId: _u,
+      status: statusField,
+      ...rest
+    } = params.body;
+
+    let statusLookupId: string | undefined;
+    if (statusField) {
+      const resolved = await this.lookupResolution.resolveField({
+        tenantId,
+        domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+        field: statusField,
+        autoCreate: true,
+      });
+      if (resolved) {
+        statusLookupId = resolved;
+      } else {
+        this.logger.warn(
+          `api:WorkOrdersService.update — could not resolve status field: ${JSON.stringify(statusField)}`,
+        );
+      }
+    }
+
     return this.workOrdersRepo.update({
       id: params.id,
       data: {
         ...rest,
+        ...(statusLookupId ? { statusLookupId } : {}),
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       } as any,
     });

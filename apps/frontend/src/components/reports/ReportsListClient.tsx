@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardList, Plus, Search, X } from 'lucide-react';
+import { ClipboardList, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -358,11 +358,12 @@ export function ReportsListClient({
 
           <Button
             size="sm"
+            variant="outline"
             className="shrink-0"
             onClick={() => setCreateDialogOpen(true)}
           >
-            <Plus className="mr-1 h-4 w-4" />
-            Create Report
+            <ClipboardList className="mr-1 h-4 w-4" />
+            Report Creation Unavailable
           </Button>
         </div>
       </div>

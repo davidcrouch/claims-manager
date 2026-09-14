@@ -78,13 +78,28 @@ export function DocumentDropZone({ onFilesDropped, children, disabled }: Documen
     document.addEventListener('dragover', handleDragOver);
     document.addEventListener('drop', handleDrop);
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDragging) {
+        setIsDragging(false);
+        setDragCounter(0);
+      }
+    };
+    const handleDragEnd = () => {
+      setIsDragging(false);
+      setDragCounter(0);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('dragend', handleDragEnd);
+
     return () => {
       document.removeEventListener('dragenter', handleDragEnter);
       document.removeEventListener('dragleave', handleDragLeave);
       document.removeEventListener('dragover', handleDragOver);
       document.removeEventListener('drop', handleDrop);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('dragend', handleDragEnd);
     };
-  }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]);
+  }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop, isDragging]);
 
   return (
     <div className="relative">

@@ -100,6 +100,37 @@ export async function deleteQuoteAction(quoteId: string): Promise<{
   }
 }
 
+export async function createQuoteVariationAction(
+  quoteId: string,
+  fields: { reasonForVariation: string; quoteType: string },
+): Promise<{
+  success: boolean;
+  quote?: Quote;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const quote = await api.createQuoteVariation(quoteId, {
+      reasonForVariation: fields.reasonForVariation,
+      quoteType: fields.quoteType,
+    });
+    revalidatePath('/quotes');
+    revalidatePath(`/quotes/${quoteId}`);
+    if (quote?.id) {
+      revalidatePath(`/quotes/${quote.id}`);
+    }
+    return { success: true, quote };
+  } catch (err) {
+    console.error('[quotes/actions.createQuoteVariationAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to create variation',
+    };
+  }
+}
+
 export async function getQuoteCatalogMismatchesAction(quoteId: string): Promise<{
   success: boolean;
   mismatches?: Array<{
@@ -464,14 +495,16 @@ export async function reorderQuoteLineItemsAction(params: {
   quoteId: string;
   items?: Array<{ id: string; sortIndex: number }>;
   combos?: Array<{ id: string; sortIndex: number }>;
+  scopes?: Array<{ id: string; sortIndex: number }>;
 }): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
+    const mergedCombos = [...(params.combos ?? []), ...(params.scopes ?? [])];
     await api.reorderQuoteLineItems(params.quoteId, {
       items: params.items,
-      combos: params.combos,
+      combos: mergedCombos.length > 0 ? mergedCombos : undefined,
     });
     revalidatePath(`/quotes/${params.quoteId}`);
     return { success: true };

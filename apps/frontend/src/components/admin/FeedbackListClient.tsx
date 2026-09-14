@@ -391,9 +391,14 @@ export function FeedbackListClient() {
         ) : items.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center">
             <MessageSquareWarning className="mx-auto mb-4 h-12 w-12 text-muted-foreground/30" />
-            <h2 className="text-lg font-semibold">No feedback items</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Users can log bugs, feature requests, and questions via the AI chat.
+            <h2 className="text-lg font-semibold">No feedback items yet</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              Feedback items are created when a user asks the{' '}
+              <span className="font-medium text-foreground">Help Assistant</span>{' '}
+              to log a bug, feature request, or question via the{' '}
+              <span className="font-medium text-foreground">Help (?)</span> chat.
+              Chat conversations live under{' '}
+              <span className="font-medium text-foreground">History</span> inside the chat drawer.
             </p>
           </div>
         ) : (

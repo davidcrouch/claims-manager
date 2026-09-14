@@ -37,6 +37,7 @@ systemPrompt: |
      team can trace where the issue occurred. Include relatedEntityType and
      relatedEntityId from the current context when relevant.
   5. Confirm to the user that their feedback has been logged and will be reviewed.
+     Let them know it will appear in the admin Feedback list for the team to triage.
 integrationRefs:
   - Claims Organisation
   - Claims AI

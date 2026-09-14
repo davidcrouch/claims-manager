@@ -14,6 +14,7 @@ import {
 } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../database/drizzle.module';
 import {
+  quotes,
   quoteGroups,
   quoteCombos,
   quoteItems,
@@ -26,7 +27,7 @@ import {
   jobContacts,
   lookupValues,
 } from '../../database/schema';
-import { eq, and, isNull, inArray, asc } from 'drizzle-orm';
+import { eq, and, isNull, inArray, asc, sql } from 'drizzle-orm';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -43,6 +44,10 @@ import {
   hasAnyPartyData,
   partyBucketsFromCwPayload,
 } from '../domain/transformers/quote-party-buckets';
+import {
+  escapeRegExp,
+  nextVariationInternalNumber,
+} from './variation-number';
 
 export interface PublishResult {
   quote: Record<string, unknown> | null;
@@ -321,6 +326,20 @@ export class QuotesService {
     const row = await this.quotesRepo.findOne({ id: params.id, tenantId });
     if (!row) throw new NotFoundException('Quote not found');
     const statusName = (row.statusName ?? '').trim().toLowerCase();
+    const approvalStatusName =
+      row.approvalInfo &&
+      typeof row.approvalInfo === 'object' &&
+      !Array.isArray(row.approvalInfo)
+        ? String((row.approvalInfo as Record<string, unknown>).statusName ?? '')
+            .trim()
+            .toLowerCase()
+        : '';
+    if (
+      this.isResubmissionRequiredStatus(statusName) ||
+      this.isResubmissionRequiredStatus(approvalStatusName)
+    ) {
+      return;
+    }
     const locked =
       !!row.externalReference || (statusName !== '' && statusName !== 'draft');
     if (locked) {
@@ -929,6 +948,158 @@ export class QuotesService {
     });
   }
 
+  /**
+   * Create a Variation draft from an existing estimate: copy header fields and
+   * the full line-item hierarchy, set type (default Variation), apply reason for
+   * variation, and append the next variation suffix to the source estimate number
+   * (EST-200206 → EST-200206-1).
+   */
+  async createVariation(params: {
+    id: string;
+    userId?: string;
+    body?: { reasonForVariation?: string; quoteType?: string };
+  }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const logPrefix = 'QuotesService.createVariation';
+    const source = await this.quotesRepo.findOne({ id: params.id, tenantId });
+    if (!source) {
+      throw new NotFoundException('Quote not found');
+    }
+    if (!source.jobId) {
+      throw new BadRequestException('Estimate must be linked to a job to create a variation');
+    }
+
+    const baseNumber = source.internalNumber?.trim();
+    if (!baseNumber) {
+      throw new BadRequestException(
+        'Estimate has no estimate number — cannot derive a variation number',
+      );
+    }
+
+    const reasonForVariation =
+      typeof params.body?.reasonForVariation === 'string'
+        ? params.body.reasonForVariation.trim()
+        : '';
+    if (!reasonForVariation) {
+      throw new BadRequestException('Reason for variation is required');
+    }
+
+    const quoteTypeName =
+      typeof params.body?.quoteType === 'string' && params.body.quoteType.trim()
+        ? params.body.quoteType.trim()
+        : 'Variation';
+
+    const draftStatusId =
+      (await this.lookupResolver.resolveByName({
+        tenantId,
+        domain: 'quote_status',
+        name: 'Draft',
+      })) ??
+      (await this.lookupResolver.resolve({
+        tenantId,
+        domain: 'quote_status',
+        externalReference: 'Draft',
+        name: 'Draft',
+        autoCreate: true,
+      }));
+
+    const quoteTypeId =
+      (await this.lookupResolver.resolveByName({
+        tenantId,
+        domain: 'quote_type',
+        name: quoteTypeName,
+      })) ??
+      (await this.lookupResolver.resolve({
+        tenantId,
+        domain: 'quote_type',
+        externalReference: quoteTypeName,
+        name: quoteTypeName,
+        autoCreate: true,
+      }));
+
+    const created = await this.db.transaction(async (tx) => {
+      const siblingRows = await tx
+        .select({ internalNumber: quotes.internalNumber })
+        .from(quotes)
+        .where(
+          and(
+            eq(quotes.tenantId, tenantId),
+            isNull(quotes.deletedAt),
+            sql`${quotes.internalNumber} ~ ${`^${escapeRegExp(baseNumber)}-\\d+$`}`,
+          ),
+        );
+
+      const internalNumber = nextVariationInternalNumber(
+        baseNumber,
+        siblingRows.map((r) => r.internalNumber).filter((n): n is string => !!n),
+      );
+
+      const sourceSchedule = (source.scheduleInfo ?? {}) as Record<string, unknown>;
+      const scheduleInfo: Record<string, unknown> = {
+        ...sourceSchedule,
+        reasonForVariation,
+      };
+
+      const sourceCustom = (source.customData ?? {}) as Record<string, unknown>;
+      const insertData: QuoteInsert = {
+        tenantId,
+        jobId: source.jobId,
+        claimId: source.claimId,
+        issuerOrganisationId: source.issuerOrganisationId ?? tenantId,
+        recipientOrganisationId: source.recipientOrganisationId,
+        ownershipStatus: 'owned',
+        name: source.name,
+        reference: source.reference,
+        note: source.note,
+        internalNumber,
+        quoteNumber: null,
+        quoteDate: source.quoteDate,
+        expiresInDays: source.expiresInDays,
+        estimatedStartDate: source.estimatedStartDate,
+        estimatedCompletionDate: source.estimatedCompletionDate,
+        subTotal: source.subTotal,
+        totalTax: source.totalTax,
+        totalAmount: source.totalAmount,
+        scheduleInfo,
+        quoteTo: (source.quoteTo ?? {}) as Record<string, unknown>,
+        quoteFor: (source.quoteFor ?? {}) as Record<string, unknown>,
+        quoteFrom: (source.quoteFrom ?? {}) as Record<string, unknown>,
+        approvalInfo: {},
+        apiPayload: {},
+        customData: { ...sourceCustom, quoteType: quoteTypeName },
+        quoteTypeLookupId: quoteTypeId ?? null,
+        statusLookupId: draftStatusId ?? null,
+        assignedToUserId: source.assignedToUserId,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+        syncStatus: null,
+        externalReference: null,
+        isAutoApproved: null,
+        originType: 'user',
+      };
+      this.applyPromotedPartyScalars(insertData, {
+        quoteTo: insertData.quoteTo as Record<string, unknown>,
+        quoteFor: insertData.quoteFor as Record<string, unknown>,
+      });
+
+      const variation = await this.quotesRepo.create({ data: insertData, tx });
+      await this.copyLineItemsToQuote({
+        tenantId,
+        sourceQuoteId: params.id,
+        targetQuoteId: variation.id,
+        tx,
+      });
+
+      this.logger.log(
+        `${logPrefix} — source=${params.id} (${baseNumber}) → variation=${variation.id} (${internalNumber}) type=${quoteTypeName} reason=${reasonForVariation}`,
+      );
+      return variation;
+    });
+
+    const row = await this.quotesRepo.findOne({ id: created.id, tenantId });
+    return row ? this.shapeQuoteResponse(row) : null;
+  }
+
   async publish(params: {
     id: string;
     userId?: string;
@@ -1011,11 +1182,29 @@ export class QuotesService {
 
     const cwQuoteId = this.crunchworkQuoteId(existing);
     const cwStatus = this.crunchworkQuoteStatusName(existing.apiPayload);
-    if (cwQuoteId && cwStatus && !this.isCrunchworkDraftStatus(cwStatus)) {
+    const localStatusName = (existing.statusName ?? '').trim();
+    const approvalStatusName =
+      existing.approvalInfo &&
+      typeof existing.approvalInfo === 'object' &&
+      !Array.isArray(existing.approvalInfo)
+        ? String((existing.approvalInfo as Record<string, unknown>).statusName ?? '').trim()
+        : '';
+    const isResubmission =
+      this.isResubmissionRequiredStatus(localStatusName) ||
+      this.isResubmissionRequiredStatus(cwStatus) ||
+      this.isResubmissionRequiredStatus(approvalStatusName);
+    if (
+      cwQuoteId &&
+      cwStatus &&
+      !this.isCrunchworkDraftStatus(cwStatus) &&
+      !isResubmission
+    ) {
       throw new BadRequestException('Quote already published to Crunchwork');
     }
-    const statusOnly = Boolean(cwQuoteId);
-    if (!statusOnly && existing.statusLookupId === pendingStatus.lookupId) {
+    // Draft create-then-status: status-only. Resubmission: full content + status.
+    const statusOnly =
+      Boolean(cwQuoteId) && this.isCrunchworkDraftStatus(cwStatus) && !isResubmission;
+    if (!statusOnly && !isResubmission && existing.statusLookupId === pendingStatus.lookupId) {
       throw new BadRequestException('Estimate already published');
     }
 
@@ -1139,6 +1328,7 @@ export class QuotesService {
         entityId: params.id,
         action: 'publish',
           payload: {
+            ...(cwQuoteId ? { cwQuoteId } : {}),
             createBody: enriched,
             publishBody: await this.buildQuotePublishBody({
               tenantId,
@@ -1147,8 +1337,10 @@ export class QuotesService {
               publisherEmail: params.userEmail,
             }),
           },
-        sourceEvent: 'api:publish',
-        idempotencyKey: `quote:${params.id}:publish`,
+        sourceEvent: isResubmission ? 'api:republish' : 'api:publish',
+        idempotencyKey: isResubmission
+          ? `quote:${params.id}:republish:${Date.now()}`
+          : `quote:${params.id}:publish`,
         tx: this.outboundSync['db'],
       });
       this.logger.log(
@@ -1256,7 +1448,8 @@ export class QuotesService {
     if (typeof status === 'string' && status.trim()) return status.trim();
     if (status && typeof status === 'object' && !Array.isArray(status)) {
       const obj = status as Record<string, unknown>;
-      for (const key of ['externalReference', 'name'] as const) {
+      // Prefer human-readable name/type (CW IdNameExternalReference) over opaque refs.
+      for (const key of ['name', 'type', 'externalReference'] as const) {
         const raw = obj[key];
         if (typeof raw === 'string' && raw.trim()) return raw.trim();
       }
@@ -1266,6 +1459,10 @@ export class QuotesService {
 
   private isCrunchworkDraftStatus(statusName: string | null): boolean {
     return (statusName ?? '').trim().toLowerCase() === 'draft';
+  }
+
+  private isResubmissionRequiredStatus(statusName: string | null | undefined): boolean {
+    return (statusName ?? '').trim().toLowerCase() === 'resubmission required';
   }
 
   /**
@@ -1948,8 +2145,16 @@ export class QuotesService {
       return updated ? this.shapeQuoteResponse(updated) : null;
     }
 
-    // Local drafts (no CW id): apply §3.3.6 creatable/editable fields in-DB.
-    if (!existing.externalReference) {
+    // Local drafts (no CW id) and Resubmission Required: edit in-DB then re-publish.
+    const statusName =
+      (existing.status?.name as string | undefined) ??
+      (typeof existing.approvalInfo === 'object' &&
+      existing.approvalInfo &&
+      !Array.isArray(existing.approvalInfo)
+        ? ((existing.approvalInfo as Record<string, unknown>).statusName as string | undefined)
+        : undefined) ??
+      '';
+    if (!existing.externalReference || this.isResubmissionRequiredStatus(statusName)) {
       await this.assertQuoteEditable({ id: params.id });
       const data = this.buildLocalDraftUpdate({
         existing,
@@ -2303,6 +2508,219 @@ export class QuotesService {
     this.logger.log(
       `${logPrefix} — copied ${srcGroups.length} groups, ${srcCombos.length} combos, ` +
       `${srcGroupItems.length + srcComboItems.length} items from quote ${quoteId} to WO ${workOrderId}`,
+    );
+  }
+
+  /**
+   * Copy the full quote line-item hierarchy (groups → combos → items) onto another quote.
+   * Skips soft-deleted combos/items and clears external/publish fields on the copies.
+   */
+  private async copyLineItemsToQuote(params: {
+    tenantId: string;
+    sourceQuoteId: string;
+    targetQuoteId: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<void> {
+    const { tenantId, sourceQuoteId, targetQuoteId, tx } = params;
+    const logPrefix = 'QuotesService.copyLineItemsToQuote';
+
+    const srcGroups = await tx
+      .select()
+      .from(quoteGroups)
+      .where(
+        and(eq(quoteGroups.tenantId, tenantId), eq(quoteGroups.quoteId, sourceQuoteId)),
+      )
+      .orderBy(quoteGroups.sortIndex);
+
+    if (srcGroups.length === 0) {
+      this.logger.debug(`${logPrefix} — no groups to copy`);
+      return;
+    }
+
+    const groupIds = srcGroups.map((g) => g.id);
+
+    const srcCombos = await tx
+      .select()
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.tenantId, tenantId),
+          inArray(quoteCombos.quoteGroupId, groupIds),
+          isNull(quoteCombos.deletedAt),
+        ),
+      )
+      .orderBy(quoteCombos.sortIndex);
+
+    const comboIds = srcCombos.map((c) => c.id);
+
+    const srcGroupItems =
+      groupIds.length > 0
+        ? await tx
+            .select()
+            .from(quoteItems)
+            .where(
+              and(
+                eq(quoteItems.tenantId, tenantId),
+                inArray(quoteItems.quoteGroupId, groupIds),
+                isNull(quoteItems.deletedAt),
+              ),
+            )
+            .orderBy(quoteItems.sortIndex)
+        : [];
+
+    const srcComboItems =
+      comboIds.length > 0
+        ? await tx
+            .select()
+            .from(quoteItems)
+            .where(
+              and(
+                eq(quoteItems.tenantId, tenantId),
+                inArray(quoteItems.quoteComboId, comboIds),
+                isNull(quoteItems.deletedAt),
+              ),
+            )
+            .orderBy(quoteItems.sortIndex)
+        : [];
+
+    const groupIdMap = new Map<string, string>();
+    for (const g of srcGroups) {
+      const [newGroup] = await tx
+        .insert(quoteGroups)
+        .values({
+          tenantId,
+          quoteId: targetQuoteId,
+          groupLabelLookupId: g.groupLabelLookupId,
+          description: g.description,
+          component: g.component,
+          dimensions: g.dimensions,
+          sortIndex: g.sortIndex,
+          totals: g.totals,
+          groupPayload: g.groupPayload,
+          externalReference: null,
+        })
+        .returning();
+      groupIdMap.set(g.id, newGroup.id);
+    }
+
+    const comboIdMap = new Map<string, string>();
+    for (const c of srcCombos) {
+      const newGroupId = groupIdMap.get(c.quoteGroupId);
+      if (!newGroupId) continue;
+      const [newCombo] = await tx
+        .insert(quoteCombos)
+        .values({
+          tenantId,
+          quoteGroupId: newGroupId,
+          catalogComboId: c.catalogComboId,
+          name: c.name,
+          component: c.component,
+          description: c.description,
+          category: c.category,
+          subCategory: c.subCategory,
+          quantity: c.quantity,
+          sortIndex: c.sortIndex,
+          totals: c.totals,
+          comboPayload: c.comboPayload,
+          externalReference: null,
+          publishStatus: null,
+          lineScopeStatusLookupId: null,
+        })
+        .returning();
+      comboIdMap.set(c.id, newCombo.id);
+    }
+
+    for (const c of srcCombos) {
+      const newComboId = comboIdMap.get(c.id);
+      if (!newComboId) continue;
+      const payload =
+        c.comboPayload && typeof c.comboPayload === 'object'
+          ? { ...(c.comboPayload as Record<string, unknown>) }
+          : null;
+      const parentId =
+        payload && typeof payload.parentComboId === 'string' ? payload.parentComboId : null;
+      if (!parentId) continue;
+      const mappedParent = comboIdMap.get(parentId);
+      if (!mappedParent || mappedParent === parentId) continue;
+      await tx
+        .update(quoteCombos)
+        .set({ comboPayload: { ...payload, parentComboId: mappedParent } })
+        .where(eq(quoteCombos.id, newComboId));
+    }
+
+    for (const item of srcGroupItems) {
+      const newGroupId = groupIdMap.get(item.quoteGroupId!);
+      if (!newGroupId) continue;
+      await tx.insert(quoteItems).values({
+        tenantId,
+        quoteGroupId: newGroupId,
+        catalogItemId: item.catalogItemId,
+        unitTypeLookupId: item.unitTypeLookupId,
+        name: item.name,
+        component: item.component,
+        description: item.description,
+        category: item.category,
+        subCategory: item.subCategory,
+        itemType: item.itemType,
+        quantity: item.quantity,
+        tax: item.tax,
+        unitCost: item.unitCost,
+        buyCost: item.buyCost,
+        markupType: item.markupType,
+        markupValue: item.markupValue,
+        allocatedCost: item.allocatedCost,
+        committedCost: item.committedCost,
+        sortIndex: item.sortIndex,
+        internal: item.internal,
+        note: item.note,
+        tags: item.tags,
+        mismatches: [],
+        totals: item.totals,
+        itemPayload: item.itemPayload,
+        externalReference: null,
+        publishStatus: null,
+        lineScopeStatusLookupId: null,
+      });
+    }
+
+    for (const item of srcComboItems) {
+      const newComboId = comboIdMap.get(item.quoteComboId!);
+      if (!newComboId) continue;
+      await tx.insert(quoteItems).values({
+        tenantId,
+        quoteComboId: newComboId,
+        catalogItemId: item.catalogItemId,
+        unitTypeLookupId: item.unitTypeLookupId,
+        name: item.name,
+        component: item.component,
+        description: item.description,
+        category: item.category,
+        subCategory: item.subCategory,
+        itemType: item.itemType,
+        quantity: item.quantity,
+        tax: item.tax,
+        unitCost: item.unitCost,
+        buyCost: item.buyCost,
+        markupType: item.markupType,
+        markupValue: item.markupValue,
+        allocatedCost: item.allocatedCost,
+        committedCost: item.committedCost,
+        sortIndex: item.sortIndex,
+        internal: item.internal,
+        note: item.note,
+        tags: item.tags,
+        mismatches: [],
+        totals: item.totals,
+        itemPayload: item.itemPayload,
+        externalReference: null,
+        publishStatus: null,
+        lineScopeStatusLookupId: null,
+      });
+    }
+
+    this.logger.log(
+      `${logPrefix} — copied ${srcGroups.length} groups, ${srcCombos.length} combos, ` +
+        `${srcGroupItems.length + srcComboItems.length} items from quote ${sourceQuoteId} to ${targetQuoteId}`,
     );
   }
 }

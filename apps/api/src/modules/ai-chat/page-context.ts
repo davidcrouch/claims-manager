@@ -192,7 +192,13 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
       'Search work orders',
       'Filter by status',
     ],
-    detailHints: ['Edit work order scope', 'Assign vendor', 'Close work order'],
+    detailHints: [
+      'Accept or Decline work orders in Received, Issued, Draft, or Open status',
+      'Start Work on an accepted work order',
+      'Edit work order scope',
+      'Assign vendor',
+      'Close work order',
+    ],
   },
   message: {
     category: 'messages',

@@ -1,0 +1,207 @@
+[
+  {
+    "id": "f72ca77c-0439-4c27-8bc9-9b8e51f2d758",
+    "status": "resolved",
+    "body": "Fix: Staging api-server was missing EMAIL_PROVIDER/RESEND_API_KEY (only auth-server had them), so EmailService fell back to console and RFQ/PO emails never left the API. Applied EMAIL_PROVIDER=resend + RESEND_API_KEY + EMAIL_FROM on staging api-server and added the same to terraform for staging/production. Please re-send an RFQ/PO after the next deploy and confirm inbox delivery."
+  },
+  {
+    "id": "eafa9ea3-f63b-4f01-9912-8ccf33c641ca",
+    "status": "resolved",
+    "body": "Fix (near-term): Crunchwork Report API is not operational, so create remains stubbed. CTAs are now labelled \"Report Creation Unavailable\" and open the explanation dialog instead of a generic unexpected error. Full CW report create will follow when the Insurance REST Reports API is available for the tenant."
+  },
+  {
+    "id": "218b9416-ce10-4889-a59c-a92c7f77c2e3",
+    "status": "resolved",
+    "body": "Fix: Journal photo upload drawer could trap users (preventClose during hung upload / missing journal context / MIME reject). Cancel/X now always works (force-close + abort), hung uploads time out, empty state is shown when no journal/folder, HEIC/extension MIME fallback added, and Documents drag overlay resets on Esc/dragend."
+  },
+  {
+    "id": "54832ec0-d1a6-4aea-84d6-214d4076b6d5",
+    "status": "resolved",
+    "body": "Fix: Estimate/PO line-item autosave was firing while a cell was focused (600ms debounce), then reload reset edit state mid-type. Autosave is suppressed while editing; after save we no longer clear the active edit cell."
+  },
+  {
+    "id": "46c673f5-c918-4aff-b6d4-a188d5bde4af",
+    "status": "resolved",
+    "body": "Fix: Duplicate of the mid-type edit close bug. Autosave no longer closes the description field while you are typing (same change as the related estimate line-item edit item)."
+  },
+  {
+    "id": "e85a8ca7-94eb-4774-8c8c-043a48eb4d42",
+    "status": "resolved",
+    "body": "Fix: Scope reorder was only applied in the UI — the API path dropped scopes. Reorder now maps scopes into combos (scopes are combos in the DB) for estimates and purchase orders so order survives refresh."
+  },
+  {
+    "id": "268f334f-d43d-4a8d-beca-9418817caced",
+    "status": "resolved",
+    "body": "Fix: Catalogue items could not drop onto an empty PO table (table target was invalid → browser 🚫). Empty-table drops are now allowed and remap to a group (server ensures a default group), so you can drag catalogue lines onto a new PO."
+  },
+  {
+    "id": "4988fefc-5a54-428f-84e7-9950caa913ca",
+    "status": "resolved",
+    "body": "Fix: Issuing felt blocked without catalogue lines because empty POs could not receive catalogue drops, and Send still allowed blank PDFs. Catalogue drop onto empty PO works; Send PO is blocked with a clear toast when there are zero line items."
+  },
+  {
+    "id": "c575ae01-4e99-4d0e-b280-578ade50d7b1",
+    "status": "resolved",
+    "body": "Fix: PO PDF mapper loaded all tenant combos/items then filtered, which could yield empty/misaligned groups. It now scopes combos/items by the PO’s group IDs (same pattern as RFQ). Please regenerate the PO PDF to pick up the fix."
+  },
+  {
+    "id": "068be261-b5cf-45aa-9504-afa1825c305d",
+    "status": "resolved",
+    "body": "Fix: PO Attachments tab was a stub and send wizards only attached the generated PDF. Attachments tab now uses the real entity attachments component; Issue PO / Send RFQ can attach job documents via the project documents picker."
+  },
+  {
+    "id": "12244c74-ae0e-48d3-b9d9-2a3abac0158d",
+    "status": "resolved",
+    "body": "Fix: Duplicate of the WO/vendor attachments report. Same change — real attachments tab + job document picker on send flows."
+  },
+  {
+    "id": "ea18d6ad-6ebe-4958-8724-a67b32c2b915",
+    "status": "resolved",
+    "body": "Fix: Accept/Decline only appeared for status Issued, while inbound CW maps Issued→Open. Accept/Decline now show for Received/Issued/Draft/Open; status updates resolve lookup by name; Help hints updated to real actions."
+  },
+  {
+    "id": "63dde5eb-34fb-4804-97cf-7c9f8bbccabb",
+    "status": "resolved",
+    "body": "Fix: Creating a contact from a job-scoped Contacts list never linked it to the job, so it disappeared from the filtered list. Create now links the new contact to the current job via addJobContacts."
+  },
+  {
+    "id": "2b246cc6-9efb-4df6-ae6e-db40e9fcf57d",
+    "status": "resolved",
+    "body": "Fix: Message acknowledgement was gated by MESSAGE_ACKNOWLEDGE_ENABLED (off on api-server). Flag enabled in staging terraform and applied on the running service; UI now surfaces a clear error if acknowledge is still unavailable (501)."
+  },
+  {
+    "id": "79fc7c06-295a-48b0-84e8-1b515a528620",
+    "status": "resolved",
+    "body": "Fix: Help chat 400s from Gemini tool-loop thoughtSignature issues. Provider retries without tools on INVALID_ARGUMENT; error banner now offers Start new conversation and notes that History preserves the thread."
+  },
+  {
+    "id": "7c2389b5-1bb5-49f0-b03b-683b187f6c76",
+    "status": "resolved",
+    "body": "Fix: Create Job was shown without jobs.create permission (silent 403). Button is now gated on jobs.create. If Nellie should create jobs, grant jobs.create on her role in Admin → Roles (accounts/member roles do not include it by default)."
+  },
+  {
+    "id": "9209ea7b-4884-4638-87fd-9508ad1efd33",
+    "status": "resolved",
+    "body": "Fix: Job detail Back hard-linked to /jobs and dropped ?page=. Back now prefers browser history / remembered list URL (page + filters). Same remember pattern applied on Claims list."
+  },
+  {
+    "id": "4de4b163-3f60-463a-b4f6-9ad311313464",
+    "status": "resolved",
+    "body": "Fix: Create Make-Safe was hidden without explanation (not a Pending status gate). Button always shows; when unavailable it is disabled with a tooltip reason (no claim / no CW Builder Make Safe type / already Make-Safe)."
+  },
+  {
+    "id": "8cdc8988-1912-411b-918d-34c4a68e0065",
+    "status": "resolved",
+    "body": "Fix: Assessment Specialists only allowed a single specialistType. UI is now multi-select checkboxes writing specialistTypes[], with backward-compatible specialistType string retained for publish mapping."
+  },
+  {
+    "id": "d0ff2dd5-80ee-4dfa-a9b9-ca3c74d9b73e",
+    "status": "resolved",
+    "body": "Fix: Archive was an unlabeled trash icon and was hidden for insurer Closed statuses. Control now shows an Archive label and only hides when the claim is already archived."
+  },
+  {
+    "id": "06718a97-64c5-4200-b5dc-7fda0d4f12d0",
+    "status": "resolved",
+    "body": "Fix: Help felt like it lost conversations on close. Closing is blocked while streaming; a toast points to History; History icon has a tooltip. Threads remain in Help → History."
+  },
+  {
+    "id": "c9b4eb25-dcd4-4621-82d5-39faf35d8dca",
+    "status": "resolved",
+    "body": "Fix: Duplicate of Help close / lost history. History drawer already existed; discoverability improved (tooltip + toast). Closing as resolved with the related Help UX changes."
+  },
+  {
+    "id": "d8719548-4397-4311-a00e-7af1a508f8ec",
+    "status": "resolved",
+    "body": "Fix: Chat questions are not auto-written to Feedback (by design). Admin Feedback empty state and Help assistant copy now explain that Feedback items appear when you ask Help to log feedback; chat transcripts live under Help → History."
+  },
+  {
+    "id": "fe0a50a5-61be-4f44-82a1-df841998a549",
+    "status": "resolved",
+    "body": "Fix: Help chat Enter now inserts a newline; Ctrl/Cmd+Enter sends (with hint text). Pop-out window not shipped in this pass — History + beside layout covers most of the follow-along need."
+  },
+  {
+    "id": "26bc1c5c-ba54-422d-b16f-03764c9c1713",
+    "status": "resolved",
+    "body": "Fix: Clarified job overview labels — \"First contacted (CW)\" vs \"Customer contact date\" vs Booked date — so SMS/contact timing is not confused with the booked appointment date."
+  },
+  {
+    "id": "3cdc4a44-24b6-4e01-8c8c-c86e0e39a798",
+    "status": "resolved",
+    "body": "Fix: Job sidebar task count included completed/cancelled tasks. Count now excludes Completed and Cancelled."
+  },
+  {
+    "id": "545ef1b0-e812-4683-8e7c-3349a3e17498",
+    "status": "resolved",
+    "body": "Fix: PO Attachments tab was a placeholder. Replaced with real entity attachments and job-document attach on Issue PO (same work as the vendor attachments bug)."
+  },
+  {
+    "id": "1ab27464-49b4-4eeb-9b34-7c195ce1da8d",
+    "status": "resolved",
+    "body": "Fix: Journal header/metadata can now be edited (name, description, visit date) from Journal overview; page content editing was already available."
+  },
+  {
+    "id": "916f3dd1-3adf-48b5-bf97-8b2b39df301e",
+    "status": "resolved",
+    "body": "Answer: Use Communications → Notes for general job notes that are not site visits (journals expect a visit date). Closing this question with that guidance."
+  },
+  {
+    "id": "f56a47c3-ca2b-4457-bb40-b8fc8703c713",
+    "status": "resolved",
+    "body": "Answer (no code change): Crunchwork allows quote/report tools in parallel by design. Tool availability is intentional; estimators should follow the procedural workflow. Closing per prior reply."
+  },
+  {
+    "id": "bd7f379c-fcbb-418a-af44-b08a431cb4d7",
+    "status": "resolved",
+    "body": "Docs: Builder Assessment Workflow steps/tasks are largely IAG/Crunchwork-owned when CW triggers an assessment. EnsureOS guide should link that process and document EnsureOS-specific extras only — not invent a full CAPS end-to-end. Closing with that scope note; further guide edits can follow separately."
+  },
+  {
+    "id": "081791e9-8435-47c4-82a5-32ec343557e2",
+    "status": "in_progress",
+    "body": "In progress: Schedule filter by estimator needs an API assigneeUserId (or equivalent) query param before the UI filter can ship. TODO left on ScheduleClient; next pass will add API + URL-persisted filter."
+  },
+  {
+    "id": "85708758-616b-42c0-a468-755f75087e9a",
+    "status": "in_progress",
+    "body": "In progress: Prefer job Documents/Photos folder for non-visit photos (attachments path improved). Optional journal-without-visit-date remains a follow-up."
+  },
+  {
+    "id": "747630b4-257f-4a78-911c-2e8f57ebaf5d",
+    "status": "open",
+    "body": "Deferred (larger feature): Out-of-hours Make Safe on-call routing via Messages + configurable on-call contacts. Duplicate of the related OOH Make Safe request — will implement as one feature."
+  },
+  {
+    "id": "c612dd40-5bc9-4137-a144-d179feba8cc2",
+    "status": "open",
+    "body": "Deferred (duplicate): Same as Out-of-hours Make Safe communication. Merge into one item when scheduling the on-call routing feature."
+  },
+  {
+    "id": "5035c011-83d7-4c8a-91c9-60badf2fd81a",
+    "status": "open",
+    "body": "Deferred (needs product scope with Brett/Matt Nas): Job/claim delay attribution (insurer/internal/insured) + simple export. Not started in this pass."
+  },
+  {
+    "id": "c9a1bb0f-d627-4076-a0b0-84a735a87dc8",
+    "status": "open",
+    "body": "Deferred: Assessment required-field checklist + playbook→tasks generation. Larger feature; not started in this pass."
+  },
+  {
+    "id": "65f78cc1-f959-40e4-babb-cc5c4e92b928",
+    "status": "open",
+    "body": "Deferred: Tentative/held appointment status to reserve estimation time before customer confirmation. Not started in this pass."
+  },
+  {
+    "id": "22a3d812-0020-49da-9cc7-bf60fae5f6ca",
+    "status": "open",
+    "body": "Deferred (duplicate): Auto bill vs PO variance highlight. Will implement once as a single feature using existing bill–PO links."
+  },
+  {
+    "id": "d975ef83-eda8-4a13-b144-d5d98d18b3a9",
+    "status": "open",
+    "body": "Deferred (duplicate of bill vs PO compare): Same feature request — merge when scheduling variance UI."
+  },
+  {
+    "id": "e60ffed4-34c8-4fd5-8d5b-2fd86b16b8cb",
+    "status": "open",
+    "body": "Deferred: Prefer catalogue/naming for makesafe PO lines; optional line category/tag if needed. Not started in this pass."
+  }
+]

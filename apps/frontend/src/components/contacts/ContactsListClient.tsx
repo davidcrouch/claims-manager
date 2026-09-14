@@ -29,6 +29,7 @@ import {
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
 import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
+import { addJobContactsAction } from '@/app/(app)/jobs/mutations';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
 import {
@@ -487,7 +488,15 @@ export function ContactsListClient({
         </div>
       </div>
 
-      <ContactFormDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <ContactFormDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        onSuccess={(contact) => {
+          if (job?.id && contact?.id) {
+            void addJobContactsAction(job.id, [{ contactId: contact.id }]);
+          }
+        }}
+      />
     </div>
   );
 }

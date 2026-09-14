@@ -1190,6 +1190,16 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Quote>('/quotes', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    createQuoteVariation(
+      id: string,
+      body?: { reasonForVariation?: string; quoteType?: string },
+    ): Promise<Quote> {
+      return fetchApi<Quote>(`/quotes/${id}/variations`, {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+      });
+    },
+
     publishQuote(id: string): Promise<PublishQuoteResult> {
       return fetchApi<PublishQuoteResult>(`/quotes/${id}/publish`, { method: 'POST' });
     },
@@ -1697,8 +1707,18 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<ConnectionDetail>(`/connections/${id}`);
     },
 
-    getConnectionDocsUrl(id: string): Promise<{ docsUrl: string; accessToken: string }> {
-      return fetchApi<{ docsUrl: string; accessToken: string }>(`/connections/${id}/docs-url`);
+    getConnectionDocsUrl(id: string): Promise<{
+      docsUrl: string;
+      accessToken: string;
+      baseApi: string | null;
+      baseUrl: string | null;
+    }> {
+      return fetchApi<{
+        docsUrl: string;
+        accessToken: string;
+        baseApi: string | null;
+        baseUrl: string | null;
+      }>(`/connections/${id}/docs-url`);
     },
 
     updateConnection(id: string, body: UpdateConnectionPayload): Promise<ProviderConnection> {

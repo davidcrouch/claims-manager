@@ -57,10 +57,11 @@ const CRUNCHWORK_FIELDS: FieldDef[] = [
   {
     key: 'docsUrl',
     label: 'API Documentation',
-    placeholder: 'https://staging-iag.crunchwork.com/swagger-ui/index.html',
+    placeholder:
+      'https://staging-iag.crunchwork.com/rest/insurance-rest/v3/api-docs',
     type: 'url',
     required: false,
-    hint: 'URL for the provider API documentation portal.',
+    hint: 'Prefer an OpenAPI JSON URL (e.g. …/v3/api-docs). HTML swagger-ui portals are opened externally.',
     mapTo: 'docsUrl',
   },
   {

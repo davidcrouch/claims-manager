@@ -973,7 +973,13 @@ export class JobsRepository {
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(tasks)
-        .where(and(eq(tasks.tenantId, tenantId), eq(tasks.jobId, jobId)))
+        .where(
+          and(
+            eq(tasks.tenantId, tenantId),
+            eq(tasks.jobId, jobId),
+            sql`${tasks.status} NOT IN ('Completed', 'Cancelled')`,
+          ),
+        )
         .then((rows) => rows[0]),
       this.db.execute<{ count: number }>(sql`
         SELECT count(*)::int AS count

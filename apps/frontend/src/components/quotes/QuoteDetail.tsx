@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,7 +17,10 @@ import {
   Users,
   CheckCircle2,
   Paperclip,
+  GitBranch,
+  Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -25,6 +28,22 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
@@ -59,6 +78,7 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { PublishButton } from '@/components/shared/PublishButton';
 import { buildEstimateReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { isArchivedStatus } from '@/components/shared/archive-list';
 import {
   DetailAssignee,
   OrgUserLabel,
@@ -90,9 +110,13 @@ import {
 } from '@/components/quotes/EstimatePublishWizard';
 import { EstimateApprovalWizard } from '@/components/quotes/EstimateApprovalWizard';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
-import { updateQuoteFieldsAction } from '@/app/(app)/quotes/actions';
+import {
+  createQuoteVariationAction,
+  updateQuoteFieldsAction,
+} from '@/app/(app)/quotes/actions';
 import {
   EMPTY_PARTY,
+  REASON_FOR_VARIATION_OPTIONS,
   type QuoteFieldsSnapshot,
   type QuoteOverviewDraft,
   type QuotePartiesSnapshot,
@@ -171,9 +195,13 @@ function getApprovalInfo(quote: Quote): QuoteApprovalInfo {
 
 export function getEstimateStatusName(quote: Quote): string {
   const approval = getApprovalInfo(quote);
+  const lookupName = quote.status?.name?.trim();
+  const approvalName = approval.statusName?.trim();
+  // Prefer CW status.name when it is Resubmission Required (lookup may still be a raw id).
+  if (isResubmissionRequiredStatus(approvalName)) return approvalName!;
   return (
-    quote.status?.name ??
-    approval.statusName ??
+    lookupName ||
+    approvalName ||
     (quote.externalReference ? 'Unknown' : 'Draft')
   );
 }
@@ -184,9 +212,14 @@ function getCrunchworkQuoteStatusName(quote: Quote): string | null {
   if (typeof status === 'string' && status.trim()) return status.trim();
   if (status && typeof status === 'object' && !Array.isArray(status)) {
     const obj = status as Dict;
-    return asString(obj.externalReference) ?? asString(obj.name) ?? null;
+    // Prefer human-readable name/type over opaque externalReference (CW IdNameExternalReference).
+    return asString(obj.name) ?? asString(obj.type) ?? asString(obj.externalReference) ?? null;
   }
   return null;
+}
+
+function isResubmissionRequiredStatus(statusName: string | null | undefined): boolean {
+  return (statusName ?? '').trim().toLowerCase() === 'resubmission required';
 }
 
 /** True when the Crunchwork quote exists but is still Draft (create succeeded, publish-status did not). */
@@ -199,6 +232,14 @@ export function isCrunchworkEstimateDraft(quote: Quote): boolean {
 
 export function isEstimateLocked(quote: Quote): boolean {
   const name = getEstimateStatusName(quote).trim().toLowerCase();
+  const approval = getApprovalInfo(quote);
+  // Insurer asked for changes — unlock so the vendor can edit and re-publish.
+  if (
+    isResubmissionRequiredStatus(name) ||
+    isResubmissionRequiredStatus(approval.statusName)
+  ) {
+    return false;
+  }
   if (quote.externalReference) return true;
   return name !== '' && name !== 'draft' && name !== 'unknown';
 }
@@ -383,7 +424,12 @@ export function QuoteDetail({
   const [workOrderDrawerOpen, setWorkOrderDrawerOpen] = useState(false);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
+  const [variationDialogOpen, setVariationDialogOpen] = useState(false);
+  const [variationPending, startVariationTransition] = useTransition();
+  const [variationReason, setVariationReason] = useState('');
+  const [variationQuoteType, setVariationQuoteType] = useState('Variation');
   const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [lineItemsEditing, setLineItemsEditing] = useState(false);
   const [overviewDirty, setOverviewDirty] = useState(false);
   const [partiesDirty, setPartiesDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -469,6 +515,14 @@ export function QuoteDetail({
   const canPublish = (!locked || canRepublish) && quote.syncStatus !== 'pending';
   const canApprove = statusName === 'Pending' && caps.estimate.approveButton.visible;
   const canCreateWorkOrder = locked && caps.workOrder.createButton.visible;
+  const canAddVariation = !isArchivedStatus(statusName) && !!quote.internalNumber;
+  const variationQuoteTypes = caps.estimateQuoteTypes;
+  const variationQuoteTypeItems = Object.fromEntries(
+    variationQuoteTypes.map((t) => [t, t]),
+  );
+  const reasonItems = Object.fromEntries(
+    REASON_FOR_VARIATION_OPTIONS.map((r) => [r, r]),
+  );
   const showTakeOffActions = tab === 'line-items' && !locked;
   /** Assignment is always editable, including published / locked estimates. */
   const canEditAssignee = true;
@@ -589,12 +643,12 @@ export function QuoteDetail({
   }, [pageDirty, anySaving, persistPending, fieldEditTick, assignedToUserId]);
 
   useEffect(() => {
-    if (locked || !lineItemsDirty || anySaving) return;
+    if (locked || !lineItemsDirty || anySaving || lineItemsEditing) return;
     const timer = setTimeout(() => {
       saveLineItemsRef.current?.();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [locked, lineItemsDirty, anySaving, lineItemsEditTick]);
+  }, [locked, lineItemsDirty, anySaving, lineItemsEditTick, lineItemsEditing]);
 
   useEffect(() => {
     if (!justSaved || anyDirty || anySaving || saveError) return;
@@ -638,6 +692,46 @@ export function QuoteDetail({
     persistPending,
   ]);
 
+  const handleCreateVariation = useCallback(() => {
+    if (!variationReason.trim()) {
+      toast.error('Select a reason for revision');
+      return;
+    }
+    if (!variationQuoteType.trim()) {
+      toast.error('Select an estimate type');
+      return;
+    }
+    startVariationTransition(async () => {
+      const result = await createQuoteVariationAction(quote.id, {
+        reasonForVariation: variationReason,
+        quoteType: variationQuoteType,
+      });
+      if (!result.success || !result.quote?.id) {
+        console.error(
+          '[frontend:QuoteDetail.handleCreateVariation]',
+          quote.id,
+          result.error,
+        );
+        toast.error(result.error ?? 'Failed to create revision');
+        return;
+      }
+      const newNumber = result.quote.internalNumber ?? 'revision';
+      toast.success(`Created revision ${newNumber}`);
+      setVariationDialogOpen(false);
+      setVariationReason('');
+      setVariationQuoteType('Variation');
+      router.push(`/quotes/${result.quote.id}`);
+      router.refresh();
+    });
+  }, [quote.id, router, variationReason, variationQuoteType]);
+
+  const openVariationDialog = useCallback(() => {
+    const types = caps.estimateQuoteTypes;
+    setVariationReason('');
+    setVariationQuoteType(types.includes('Variation') ? 'Variation' : (types[0] ?? 'Variation'));
+    setVariationDialogOpen(true);
+  }, [caps.estimateQuoteTypes]);
+
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Line Items', icon: Layers },
@@ -657,6 +751,17 @@ export function QuoteDetail({
         dirty={anyDirty}
       />
       <SetHeaderActions>
+        {canAddVariation && (
+          <Button
+            size="default"
+            onClick={openVariationDialog}
+            disabled={variationPending}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Create Revision
+          </Button>
+        )}
         {showTakeOffActions && (
           <Button
             size="default"
@@ -714,6 +819,114 @@ export function QuoteDetail({
           />
         </HeaderActionToolbar>
       </SetHeaderActions>
+      <Dialog
+        open={variationDialogOpen}
+        onOpenChange={(next) => {
+          if (variationPending) return;
+          setVariationDialogOpen(next);
+          if (!next) {
+            setVariationReason('');
+            setVariationQuoteType('Variation');
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <GitBranch className="h-6 w-6" />
+              </div>
+              <div className="space-y-2 pt-0.5">
+                <DialogTitle className="text-xl">Create Revision</DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed">
+                  Create a revision of{' '}
+                  <span className="font-medium text-foreground">
+                    {quote.internalNumber ?? title}
+                  </span>
+                  ? A new draft estimate will be created with a copy of the line items
+                  and a revision number appended (for example{' '}
+                  <span className="font-mono text-foreground">
+                    {quote.internalNumber}-1
+                  </span>
+                  ).
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="mt-2 grid gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="variation-quote-type">
+                Estimate type <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={variationQuoteType || null}
+                onValueChange={(v) => setVariationQuoteType(v ?? '')}
+                disabled={variationPending}
+                items={variationQuoteTypeItems}
+              >
+                <SelectTrigger id="variation-quote-type" className="w-full">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {variationQuoteTypes.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="variation-reason">
+                Reason for Revision <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={variationReason || null}
+                onValueChange={(v) => setVariationReason(v ?? '')}
+                disabled={variationPending}
+                items={reasonItems}
+              >
+                <SelectTrigger id="variation-reason" className="w-full">
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REASON_FOR_VARIATION_OPTIONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="mt-2 gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              disabled={variationPending}
+              onClick={() => setVariationDialogOpen(false)}
+              className="h-9 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                variationPending || !variationReason.trim() || !variationQuoteType.trim()
+              }
+              onClick={handleCreateVariation}
+              className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
+            >
+              {variationPending ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                'Create Revision'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <WorkOrderFormDrawer
         open={workOrderDrawerOpen}
         onOpenChange={setWorkOrderDrawerOpen}
@@ -784,6 +997,11 @@ export function QuoteDetail({
               : 'This estimate has been published and can no longer be edited, except for Assigned.'}
           </div>
         )}
+        {!locked && isResubmissionRequiredStatus(statusName) && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Resubmission required — edit this estimate, then publish again to send the revised version.
+          </div>
+        )}
         {saveError && (
           <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {saveError}
@@ -812,6 +1030,7 @@ export function QuoteDetail({
               onDirtyChange={handleLineItemsDirtyChange}
               onUndoCapture={handleLineItemsUndoCapture}
               onSaveStateChange={handleLineItemsSaveState}
+              onEditingChange={setLineItemsEditing}
               hideToolbarActions
             />
           </div>

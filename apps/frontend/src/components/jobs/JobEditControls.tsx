@@ -156,12 +156,14 @@ export function EditRefSelect({
   onChange,
   disabled,
   placeholder = 'Select...',
+  className,
 }: {
   value: string;
   options: Array<{ name: string; externalReference: string }>;
   onChange: (opt: { name: string; externalReference: string } | null) => void;
   disabled?: boolean;
   placeholder?: string;
+  className?: string;
 }) {
   const items: Record<string, string> = { [EMPTY]: '—' };
   for (const opt of options) {
@@ -181,7 +183,7 @@ export function EditRefSelect({
       items={items}
       disabled={disabled}
     >
-      <SelectTrigger className="h-8 w-full max-w-xs" disabled={disabled}>
+      <SelectTrigger className={className ?? 'h-8 w-full max-w-xs'} disabled={disabled}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

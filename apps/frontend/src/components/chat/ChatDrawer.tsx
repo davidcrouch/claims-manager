@@ -4,6 +4,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Bot, History, X } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   createConversationAction,
   deleteConversationAction,
@@ -97,6 +103,7 @@ export function ChatDrawer({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [canvasArtifact, setCanvasArtifact] = useState<CanvasArtifact | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const pageContext = usePageContext();
 
@@ -120,6 +127,10 @@ export function ChatDrawer({
     const handleKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (besideForm) return;
+      if (isStreaming) return;
+      if (liveMessages.length > 0) {
+        toast.success('Conversation saved — open History to continue later');
+      }
       onOpenChange(false);
     };
     document.addEventListener('keydown', handleKey);
@@ -134,7 +145,7 @@ export function ChatDrawer({
       document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, besideForm, onOpenChange]);
+  }, [open, besideForm, onOpenChange, isStreaming, liveMessages]);
 
   useEffect(() => {
     if (!open) {
@@ -414,7 +425,16 @@ export function ChatDrawer({
                   className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                   variants={{ closed: { opacity: 0 }, open: { opacity: 1 } }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => {
+                    if (isStreaming) {
+                      toast.info('Please wait for the response to finish or stop it before closing');
+                      return;
+                    }
+                    if (liveMessages.length > 0) {
+                      toast.success('Conversation saved — open History to continue later');
+                    }
+                    onOpenChange(false);
+                  }}
                 />
               )}
               <motion.div
@@ -455,26 +475,44 @@ export function ChatDrawer({
                   </div>
                   <div className="flex items-center gap-1">
                     {!toolDrawerOpen && (
-                      <button
-                        type="button"
-                        onClick={() => setHistoryOpen((v) => !v)}
-                        aria-label={
-                          historyOpen
-                            ? 'Hide conversation history'
-                            : 'Show conversation history'
-                        }
-                        aria-pressed={historyOpen}
-                        className={cn(
-                          'mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                          historyOpen && 'bg-sidebar-accent text-sidebar-foreground',
-                        )}
-                      >
-                        <History className="h-5 w-5" />
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <button
+                              type="button"
+                              onClick={() => setHistoryOpen((v) => !v)}
+                              aria-label={
+                                historyOpen
+                                  ? 'Hide conversation history'
+                                  : 'Show conversation history'
+                              }
+                              aria-pressed={historyOpen}
+                              className={cn(
+                                'mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                                historyOpen && 'bg-sidebar-accent text-sidebar-foreground',
+                              )}
+                            >
+                              <History className="h-5 w-5" />
+                            </button>
+                          }
+                        />
+                        <TooltipContent side="bottom">
+                          Conversation history
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                     <button
                       type="button"
-                      onClick={() => onOpenChange(false)}
+                      onClick={() => {
+                        if (isStreaming) {
+                          toast.info('Please wait for the response to finish or stop it before closing');
+                          return;
+                        }
+                        if (liveMessages.length > 0) {
+                          toast.success('Conversation saved — open History to continue later');
+                        }
+                        onOpenChange(false);
+                      }}
                       aria-label="Close"
                       className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                     >
@@ -502,6 +540,8 @@ export function ChatDrawer({
                       onBranch={handleBranch}
                       relatedRecordType={relatedEntityType}
                       relatedRecordId={relatedEntityId}
+                      onNewConversation={handleNewConversation}
+                      onStreamingChange={setIsStreaming}
                     />
                     </ChatDisplayModeProvider>
                     )}

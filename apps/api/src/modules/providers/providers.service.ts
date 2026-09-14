@@ -491,7 +491,12 @@ export class ProvidersService {
   async getDocsUrl(params: {
     id: string;
     tenantId: string;
-  }): Promise<{ docsUrl: string; accessToken: string }> {
+  }): Promise<{
+    docsUrl: string;
+    accessToken: string;
+    baseApi: string | null;
+    baseUrl: string | null;
+  }> {
     this.logger.debug(`[ProvidersService.getDocsUrl] id=${params.id}`);
     const conn = await this.connectionsRepo.findById({ id: params.id });
     if (!conn || conn.tenantId !== params.tenantId) {
@@ -513,7 +518,12 @@ export class ProvidersService {
       },
     });
 
-    return { docsUrl: conn.docsUrl, accessToken };
+    return {
+      docsUrl: conn.docsUrl,
+      accessToken,
+      baseApi: conn.baseApi ?? null,
+      baseUrl: conn.baseUrl ?? null,
+    };
   }
 
   private requireProvider(code: string): ProviderRegistryEntry {

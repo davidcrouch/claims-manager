@@ -276,6 +276,9 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [mineOnly, setMineOnly] = useState(false);
+  // TODO (081791e9): Add assignee/estimator filter — requires API support for
+  // `assigneeUserId` query param in fetchScheduleEventsAction, then a
+  // user-select dropdown here persisted in URL search params.
   const [enabledTypes, setEnabledTypes] = useState<Set<ScheduleEventType>>(
     () => new Set(DEFAULT_ENABLED_TYPES),
   );

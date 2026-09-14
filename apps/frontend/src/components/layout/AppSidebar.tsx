@@ -223,8 +223,19 @@ export function isAdminNavPath(pathname: string): boolean {
   return isAdminPath(pathname);
 }
 
-function resolveHref(item: NavItem, jobId: string | null): string {
-  if (!jobId || !item.jobFilterable) return item.href;
+function resolveHref(
+  item: NavItem,
+  jobId: string | null,
+  pathname: string,
+): string {
+  if (!jobId) return item.href;
+  if (item.href === '/jobs') {
+    // On the selected job's detail → open the jobs list; otherwise → open that job.
+    const onSelectedJobDetail =
+      pathname === `/jobs/${jobId}` || pathname.startsWith(`/jobs/${jobId}/`);
+    return onSelectedJobDetail ? '/jobs' : `/jobs/${jobId}`;
+  }
+  if (!item.jobFilterable) return item.href;
   return `${item.href}${item.href.includes('?') ? '&' : '?'}jobId=${jobId}`;
 }
 
@@ -289,7 +300,7 @@ export function AppSidebar({
     return (
       <SidebarMenu>
         {visibleItems.map((item) => {
-          const href = resolveHref(item, jobId);
+          const href = resolveHref(item, jobId, pathname);
           const count = item.countKey ? relatedCounts?.[item.countKey] : undefined;
           return (
             <SidebarMenuItem key={item.href}>

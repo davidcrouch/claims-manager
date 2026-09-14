@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { useChatStream } from '@/lib/ai/use-chat-stream';
 import type { ChatMessage, CanvasArtifact, FilePart } from '@/lib/ai/chat-types';
 import type { Agent } from '@/lib/ai/types';
@@ -43,6 +44,8 @@ interface ChatInterfaceProps {
   relatedRecordType?: string;
   relatedRecordId?: string;
   startWithMic?: boolean;
+  onNewConversation?: () => void;
+  onStreamingChange?: (streaming: boolean) => void;
 }
 
 export function ChatInterface({
@@ -63,6 +66,8 @@ export function ChatInterface({
   relatedRecordType,
   relatedRecordId,
   startWithMic,
+  onNewConversation,
+  onStreamingChange,
 }: ChatInterfaceProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [interruptedMessageId, setInterruptedMessageId] = useState<string | null>(null);
@@ -175,6 +180,10 @@ export function ChatInterface({
   const isStreaming = status === 'streaming';
   const isSubmitting = status === 'submitted';
   const isLoading = isStreaming || isSubmitting;
+
+  useEffect(() => {
+    onStreamingChange?.(isLoading);
+  }, [isLoading, onStreamingChange]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -465,7 +474,22 @@ export function ChatInterface({
       {error && (
         <div className="mx-4 mb-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-          <p className="text-xs text-red-700">{error.message}</p>
+          <div className="flex-1">
+            <p className="text-xs text-red-700">{error.message}</p>
+            {onNewConversation && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.info('Your conversation history is preserved in History');
+                  onNewConversation();
+                }}
+                className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-200"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Start new conversation
+              </button>
+            )}
+          </div>
         </div>
       )}
 

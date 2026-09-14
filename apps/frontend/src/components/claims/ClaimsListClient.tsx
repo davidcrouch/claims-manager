@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useRememberListUrl } from '@/components/layout/BackButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -176,6 +177,8 @@ export function ClaimsListClient({
   const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useRememberListUrl('/claims');
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
     initialFetchKey,
   });

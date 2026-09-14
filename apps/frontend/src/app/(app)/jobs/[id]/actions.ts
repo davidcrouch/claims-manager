@@ -111,7 +111,13 @@ export async function acknowledgeMessageAction(id: string): Promise<{ success: b
     return { success: true };
   } catch (err) {
     console.error('[jobs/[id]/actions acknowledgeMessageAction]', err);
-    return { success: false, error: err instanceof Error ? err.message : 'Failed to acknowledge' };
+    const isNotImpl = err instanceof ApiError && (err.status === 501 || err.status === 404);
+    const message = isNotImpl
+      ? 'Message acknowledgement is not enabled on this environment. Contact your administrator to enable MESSAGE_ACKNOWLEDGE_ENABLED.'
+      : err instanceof Error
+        ? err.message
+        : 'Failed to acknowledge';
+    return { success: false, error: message };
   }
 }
 
@@ -212,6 +218,7 @@ export async function updateJobDatesAction(
     estimatedStartDate?: string | null;
     estimatedCompletionDate?: string | null;
     assignedToUserId?: string | null;
+    claimRecommendation?: string | null;
   },
 ): Promise<{ success: boolean; error?: string }> {
   return updateJobFieldsAction(jobId, dates);
@@ -223,6 +230,7 @@ export type UpdateJobFieldsInput = {
   attendanceDate?: string | null;
   estimatedStartDate?: string | null;
   estimatedCompletionDate?: string | null;
+  claimRecommendation?: string | null;
   assignedToUserId?: string | null;
   statusLookupId?: string | null;
   statusExternalReference?: string | null;
@@ -255,19 +263,24 @@ export async function updateJobFieldsAction(
 
     const body: Record<string, unknown> = {};
 
-    const datePatch: Record<string, unknown> = {};
-    if (fields.bookedDate !== undefined) datePatch.bookedDate = fields.bookedDate;
-    if (fields.attendanceDate !== undefined) datePatch.attendanceDate = fields.attendanceDate;
+    const customPatch: Record<string, unknown> = {};
+    if (fields.bookedDate !== undefined) customPatch.bookedDate = fields.bookedDate;
+    if (fields.attendanceDate !== undefined) customPatch.attendanceDate = fields.attendanceDate;
     if (fields.estimatedStartDate !== undefined) {
-      datePatch.estimatedStartDate = fields.estimatedStartDate;
+      customPatch.estimatedStartDate = fields.estimatedStartDate;
     }
     if (fields.estimatedCompletionDate !== undefined) {
-      datePatch.estimatedCompletionDate = fields.estimatedCompletionDate;
+      customPatch.estimatedCompletionDate = fields.estimatedCompletionDate;
     }
-    if (Object.keys(datePatch).length > 0) {
-      body.customData = { ...existingCustom, ...datePatch };
+    if (fields.claimRecommendation !== undefined) {
+      customPatch.claimRecommendation = fields.claimRecommendation;
+      // Top-level for CW outbound (transformJobPayload omits nested customData except dates).
+      body.claimRecommendation = fields.claimRecommendation;
+    }
+    if (Object.keys(customPatch).length > 0) {
+      body.customData = { ...existingCustom, ...customPatch };
       console.info(
-        '[jobs/[id]/actions updateJobFieldsAction] including job dates in customData',
+        '[jobs/[id]/actions updateJobFieldsAction] including job customData patch',
       );
     }
 

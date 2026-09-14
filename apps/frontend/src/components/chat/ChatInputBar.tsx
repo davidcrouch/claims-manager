@@ -216,9 +216,13 @@ export const ChatInputBar = memo(
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
-    e.preventDefault();
-    handleFormSubmit(e.currentTarget.value);
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    // Ctrl/Cmd+Enter sends; plain Enter inserts a newline
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      handleFormSubmit(e.currentTarget.value);
+    }
+    // Plain Enter & Shift+Enter fall through to insert newline naturally
   }
 
   function handlePaste(e: ClipboardEvent) {
@@ -498,7 +502,13 @@ export const ChatInputBar = memo(
         </div>
 
         <p className="mt-1.5 text-center text-[10px] text-slate-400">
-          AI can make mistakes. Check important info.
+          AI can make mistakes. Check important info.{' '}
+          <span className="text-slate-300">
+            {typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
+              ? '⌘'
+              : 'Ctrl'}
+            +Enter to send
+          </span>
         </p>
       </div>
     </div>

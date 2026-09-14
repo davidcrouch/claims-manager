@@ -1,8 +1,14 @@
 'use client';
 
+import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, ExternalLink, FileText, MapPin } from 'lucide-react';
+import { Calendar, Check, ExternalLink, FileText, MapPin, Pencil, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
   DefRow,
@@ -14,6 +20,7 @@ import {
 } from '@/components/shared/detail';
 import { LocationMap } from '@/components/shared/LocationMap';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { updateJournalAction } from '@/app/(app)/journals/actions';
 import type { Job, Journal } from '@/types/api';
 
 export interface JournalOverviewProps {
@@ -58,12 +65,57 @@ function journalAddressQuery(journal: Journal): string | null {
 }
 
 export function JournalOverview({ journal, entryCount, job = null }: JournalOverviewProps) {
+  const router = useRouter();
   const lat = journal.latitude != null ? Number(journal.latitude) : NaN;
   const lng = journal.longitude != null ? Number(journal.longitude) : NaN;
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
   const addressQuery = journalAddressQuery(journal);
   const streetLine = formatStreetLine(journalAddressLike(journal));
   const addressLine = streetLine || addressQuery;
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editName, setEditName] = useState(journal.name);
+  const [editDescription, setEditDescription] = useState(journal.description ?? '');
+  const [editVisitDate, setEditVisitDate] = useState(
+    (typeof journal.metadata?.visitDate === 'string' ? journal.metadata.visitDate : '') ?? '',
+  );
+
+  const startEdit = useCallback(() => {
+    setEditName(journal.name);
+    setEditDescription(journal.description ?? '');
+    setEditVisitDate(
+      (typeof journal.metadata?.visitDate === 'string' ? journal.metadata.visitDate : '') ?? '',
+    );
+    setEditing(true);
+  }, [journal]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+  }, []);
+
+  const saveEdit = useCallback(async () => {
+    setSaving(true);
+    const metadata = { ...journal.metadata };
+    if (editVisitDate.trim()) {
+      metadata.visitDate = editVisitDate.trim();
+    } else {
+      delete metadata.visitDate;
+    }
+    const result = await updateJournalAction(journal.id, {
+      name: editName.trim() || journal.name,
+      description: editDescription.trim() || undefined,
+      metadata,
+    });
+    setSaving(false);
+    if (result.success) {
+      toast.success('Journal updated');
+      setEditing(false);
+      router.refresh();
+    } else {
+      toast.error(result.error ?? 'Failed to update journal');
+    }
+  }, [journal, editName, editDescription, editVisitDate, router]);
 
   return (
     <div className="space-y-4">
@@ -72,8 +124,61 @@ export function JournalOverview({ journal, entryCount, job = null }: JournalOver
           <SectionCard
             title="Journal Details"
             icon={<FileText className="h-4 w-4 text-muted-foreground" />}
+            action={
+              editing ? (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={saving}
+                    onClick={cancelEdit}
+                    title="Cancel editing"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700"
+                    disabled={saving || !editName.trim()}
+                    onClick={() => void saveEdit()}
+                    title="Save changes"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={startEdit}
+                  title="Edit journal details"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )
+            }
           >
-            <DefRow label="Name" value={journal.name} />
+            <DefRow
+              label="Name"
+              value={
+                editing ? (
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    disabled={saving}
+                    className="h-7 w-full max-w-md text-sm"
+                  />
+                ) : (
+                  journal.name
+                )
+              }
+            />
             <DefRow
               label="Job"
               value={
@@ -94,7 +199,15 @@ export function JournalOverview({ journal, entryCount, job = null }: JournalOver
             <DefRow
               label="Description"
               value={
-                journal.description?.trim() ? (
+                editing ? (
+                  <Textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    disabled={saving}
+                    rows={3}
+                    className="w-full max-w-md text-sm"
+                  />
+                ) : journal.description?.trim() ? (
                   <span className="whitespace-pre-wrap">{journal.description}</span>
                 ) : (
                   '—'
@@ -105,9 +218,25 @@ export function JournalOverview({ journal, entryCount, job = null }: JournalOver
               label="Entries"
               value={`${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}`}
             />
-            {typeof journal.metadata?.visitDate === 'string' && journal.metadata.visitDate && (
-              <DefRow label="Visit date" value={formatVisitDate(journal.metadata.visitDate)} />
-            )}
+            <DefRow
+              label="Visit date"
+              value={
+                editing ? (
+                  <Input
+                    type="date"
+                    value={editVisitDate}
+                    onChange={(e) => setEditVisitDate(e.target.value)}
+                    disabled={saving}
+                    className="h-7 w-40 text-sm"
+                  />
+                ) : typeof journal.metadata?.visitDate === 'string' &&
+                  journal.metadata.visitDate ? (
+                  formatVisitDate(journal.metadata.visitDate)
+                ) : (
+                  '—'
+                )
+              }
+            />
             <DefRow
               label="Created"
               value={

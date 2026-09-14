@@ -20,10 +20,15 @@ import { ProviderBadge } from '@/components/ui/provider-badge';
 import { Input } from '@/components/ui/input';
 import {
   EditLookupSelect,
+  EditRefSelect,
   EditText,
   EditTextarea,
 } from '@/components/jobs/JobEditControls';
 import type { JobEditPending, JobOverviewDraft, LookupOption } from '@/components/jobs/job-edit.types';
+import {
+  CLAIM_RECOMMENDATION_OPTIONS,
+  normalizeClaimRecommendation,
+} from '@/components/jobs/job-edit.types';
 import { jobInsurerReference, jobAccountLabel } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 import type { JobKindCapabilities } from '@/lib/job-kind-registry';
@@ -177,6 +182,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     pick(custom, 'estimatedCompletionDate') ?? pick(api, 'estimatedCompletionDate'),
   );
   const completedDate = asString(pick(custom, 'completedDate') ?? pick(api, 'completedDate'));
+  const claimRecommendationRaw = normalizeClaimRecommendation(
+    asString(pick(custom, 'claimRecommendation') ?? pick(api, 'claimRecommendation')),
+  );
 
   const [customerContactDate, setCustomerContactDate] = useState(customerContactDateRaw ?? '');
   const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
@@ -185,6 +193,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(
     estimatedCompletionDateRaw ?? '',
   );
+  const [claimRecommendation, setClaimRecommendation] = useState(claimRecommendationRaw);
 
   const [statusLookupId, setStatusLookupId] = useState(job.statusLookupId ?? job.status?.id ?? '');
   const [statusExternalReference, setStatusExternalReference] = useState(
@@ -207,6 +216,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const [savedEstimatedCompletionDate, setSavedEstimatedCompletionDate] = useState(
     estimatedCompletionDateRaw ?? '',
   );
+  const [savedClaimRecommendation, setSavedClaimRecommendation] = useState(claimRecommendationRaw);
   const [savedStatusLookupId, setSavedStatusLookupId] = useState(
     job.statusLookupId ?? job.status?.id ?? '',
   );
@@ -223,6 +233,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     const nextAttendance = attendanceDateRaw ?? '';
     const nextEstimatedStart = estimatedStartDateRaw ?? '';
     const nextEstimatedCompletion = estimatedCompletionDateRaw ?? '';
+    const nextClaimRecommendation = claimRecommendationRaw;
     const nextStatusId = job.statusLookupId ?? job.status?.id ?? '';
     const nextStatusExt = job.status?.externalReference ?? '';
     const nextInstructions = job.jobInstructions ?? '';
@@ -232,6 +243,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setAttendanceDate(nextAttendance);
     setEstimatedStartDate(nextEstimatedStart);
     setEstimatedCompletionDate(nextEstimatedCompletion);
+    setClaimRecommendation(nextClaimRecommendation);
     setStatusLookupId(nextStatusId);
     setStatusExternalReference(nextStatusExt);
     setJobInstructions(nextInstructions);
@@ -241,6 +253,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setSavedAttendanceDate(nextAttendance);
     setSavedEstimatedStartDate(nextEstimatedStart);
     setSavedEstimatedCompletionDate(nextEstimatedCompletion);
+    setSavedClaimRecommendation(nextClaimRecommendation);
     setSavedStatusLookupId(nextStatusId);
     setSavedStatusExternalReference(nextStatusExt);
     setSavedJobInstructions(nextInstructions);
@@ -254,6 +267,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     attendanceDate !== savedAttendanceDate ||
     estimatedStartDate !== savedEstimatedStartDate ||
     estimatedCompletionDate !== savedEstimatedCompletionDate ||
+    claimRecommendation !== savedClaimRecommendation ||
     (caps.job.statusEditable.editable && statusLookupId !== savedStatusLookupId) ||
     (caps.job.instructionsEditable.editable && jobInstructions !== savedJobInstructions) ||
     (caps.job.vendorExtRefEditable.editable && vendorExtRef !== savedVendorExtRef);
@@ -268,6 +282,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     attendanceDate,
     estimatedStartDate,
     estimatedCompletionDate,
+    claimRecommendation,
     statusLookupId,
     jobInstructions,
     vendorExtRef,
@@ -281,6 +296,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       attendanceDate: attendanceDate || null,
       estimatedStartDate: estimatedStartDate || null,
       estimatedCompletionDate: estimatedCompletionDate || null,
+      claimRecommendation: claimRecommendation || null,
     };
     if (caps.job.statusEditable.editable) {
       pending.statusLookupId = statusLookupId || null;
@@ -301,6 +317,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setAttendanceDate(savedAttendanceDate);
     setEstimatedStartDate(savedEstimatedStartDate);
     setEstimatedCompletionDate(savedEstimatedCompletionDate);
+    setClaimRecommendation(savedClaimRecommendation);
     setStatusLookupId(savedStatusLookupId);
     setStatusExternalReference(savedStatusExternalReference);
     setJobInstructions(savedJobInstructions);
@@ -313,6 +330,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setAttendanceDate(next.attendanceDate);
     setEstimatedStartDate(next.estimatedStartDate);
     setEstimatedCompletionDate(next.estimatedCompletionDate);
+    setClaimRecommendation(next.claimRecommendation);
     setStatusLookupId(next.statusLookupId);
     setStatusExternalReference(next.statusExternalReference);
     setJobInstructions(next.jobInstructions);
@@ -332,6 +350,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       if (saved.estimatedCompletionDate !== undefined) {
         setSavedEstimatedCompletionDate(saved.estimatedCompletionDate ?? '');
       }
+      if (saved.claimRecommendation !== undefined) {
+        setSavedClaimRecommendation(saved.claimRecommendation ?? '');
+      }
       if (saved.statusLookupId !== undefined) setSavedStatusLookupId(saved.statusLookupId ?? '');
       if (saved.statusExternalReference !== undefined) {
         setSavedStatusExternalReference(saved.statusExternalReference ?? '');
@@ -347,6 +368,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setSavedAttendanceDate(attendanceDate);
     setSavedEstimatedStartDate(estimatedStartDate);
     setSavedEstimatedCompletionDate(estimatedCompletionDate);
+    setSavedClaimRecommendation(claimRecommendation);
     setSavedStatusLookupId(statusLookupId);
     setSavedStatusExternalReference(statusExternalReference);
     setSavedJobInstructions(jobInstructions);
@@ -369,6 +391,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       attendanceDate: savedAttendanceDate,
       estimatedStartDate: savedEstimatedStartDate,
       estimatedCompletionDate: savedEstimatedCompletionDate,
+      claimRecommendation: savedClaimRecommendation,
       statusLookupId: savedStatusLookupId,
       statusExternalReference: savedStatusExternalReference,
       jobInstructions: savedJobInstructions,
@@ -386,6 +409,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     attendanceDate,
     estimatedStartDate,
     estimatedCompletionDate,
+    claimRecommendation,
     statusLookupId,
     statusExternalReference,
     jobInstructions,
@@ -395,6 +419,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     savedAttendanceDate,
     savedEstimatedStartDate,
     savedEstimatedCompletionDate,
+    savedClaimRecommendation,
     savedStatusLookupId,
     savedStatusExternalReference,
     savedJobInstructions,
@@ -529,11 +554,28 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           </AnimatePresence>
         </SectionCard>
         <SectionCard title="Job Dates &amp; Approval" icon={<Clock className="h-4 w-4 text-muted-foreground" />}>
+          <DefRow
+            label="Claim Recommendation"
+            value={
+              editing ? (
+                <EditRefSelect
+                  value={claimRecommendation}
+                  options={CLAIM_RECOMMENDATION_OPTIONS}
+                  onChange={(opt) => setClaimRecommendation(opt?.externalReference ?? '')}
+                  disabled={saving}
+                  placeholder="Select recommendation..."
+                  className="h-8 w-full max-w-md"
+                />
+              ) : (
+                claimRecommendation || '—'
+              )
+            }
+          />
           <DefRow label="Auto approval applies" value={<BoolPill value={autoApproval} />} />
           {vendorJobNumber && <DefRow label="Vendor job number" value={vendorJobNumber} />}
-          <DefRow label="Contact date" value={formatDate(contactDate)} />
+          <DefRow label="First contacted (CW)" value={formatDate(contactDate)} />
           <DefRow
-            label="Customer Contact Date"
+            label="Customer contact date"
             value={
               editing ? (
                 <Input

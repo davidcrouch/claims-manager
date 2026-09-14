@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import {
   ShoppingCart,
   ExternalLink,
@@ -71,6 +72,8 @@ import {
 } from '@/components/line-items/PurchaseOrderLineItemsTab';
 import { IssuesTab } from '@/components/purchase-orders/IssuesTab';
 import { IssuePoDrawer } from '@/components/purchase-orders/IssuePoDrawer';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
+import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -430,6 +433,7 @@ function LineItemsTab({
   onDirtyChange,
   onUndoCapture,
   onSaveStateChange,
+  onEditingChange,
 }: {
   po: PurchaseOrder;
   locked: boolean;
@@ -439,6 +443,7 @@ function LineItemsTab({
   onDirtyChange: (dirty: boolean, save: () => void) => void;
   onUndoCapture: (restoreEdits: PoLineItemEdits) => void;
   onSaveStateChange: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+  onEditingChange: (editing: boolean) => void;
 }) {
   return (
     <PurchaseOrderLineItemsTab
@@ -450,6 +455,7 @@ function LineItemsTab({
       onDirtyChange={onDirtyChange}
       onUndoCapture={onUndoCapture}
       onSaveStateChange={onSaveStateChange}
+      onEditingChange={onEditingChange}
       hideToolbarActions
     />
   );
@@ -471,19 +477,14 @@ function BillsTab() {
   );
 }
 
-function AttachmentsTab() {
+function AttachmentsTab({ po, jobId }: { po: PurchaseOrder; jobId?: string | null }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Attachments</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Attachments linked to this purchase order will appear here once the
-          attachments API is connected.
-        </p>
-      </CardContent>
-    </Card>
+    <EntityAttachmentsTab
+      entityId={po.id}
+      relatedRecordType="PurchaseOrder"
+      jobId={jobId}
+      entityLabel="this purchase order"
+    />
   );
 }
 
@@ -529,11 +530,13 @@ export function PurchaseOrderDetail({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
   const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [lineItemsEditing, setLineItemsEditing] = useState(false);
   const [lineItemsSaving, setLineItemsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
+  const [lineItemCount, setLineItemCount] = useState<number | null>(null);
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const lineItemsRef = useRef<PurchaseOrderLineItemsTabHandle>(null);
 
@@ -559,8 +562,17 @@ export function PurchaseOrderDetail({
     setSaveError(null);
     setJustSaved(false);
     setUndoStack([]);
+    setLineItemCount(null);
     setLineItemsMounted(tab === 'line-items');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- remount take-off for the new PO
+  }, [po.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPurchaseOrderLineItemsAction(po.id, { page: 1, limit: 1 }).then((res) => {
+      if (!cancelled && res.success) setLineItemCount(res.total ?? 0);
+    });
+    return () => { cancelled = true; };
   }, [po.id]);
 
   useEffect(() => {
@@ -598,17 +610,21 @@ export function PurchaseOrderDetail({
         return;
       }
       setJustSaved(true);
+      // Refresh line item count after saves (items may have been added/removed)
+      getPurchaseOrderLineItemsAction(po.id, { page: 1, limit: 1 }).then((res) => {
+        if (res.success) setLineItemCount(res.total ?? 0);
+      });
     },
-    [],
+    [po.id],
   );
 
   useEffect(() => {
-    if (locked || !lineItemsDirty || lineItemsSaving) return;
+    if (locked || !lineItemsDirty || lineItemsSaving || lineItemsEditing) return;
     const timer = setTimeout(() => {
       saveLineItemsRef.current?.();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [locked, lineItemsDirty, lineItemsSaving, lineItemsEditTick]);
+  }, [locked, lineItemsDirty, lineItemsSaving, lineItemsEditTick, lineItemsEditing]);
 
   useEffect(() => {
     if (!justSaved || lineItemsDirty || lineItemsSaving || saveError) return;
@@ -654,6 +670,10 @@ export function PurchaseOrderDetail({
             size="default"
             className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
             onClick={() => {
+              if (lineItemCount !== null && lineItemCount === 0) {
+                toast.error('Add at least one line item before issuing this purchase order.');
+                return;
+              }
               setTab('issues');
               setIssueDrawerOpen(true);
             }}
@@ -729,6 +749,7 @@ export function PurchaseOrderDetail({
               onDirtyChange={handleLineItemsDirtyChange}
               onUndoCapture={handleLineItemsUndoCapture}
               onSaveStateChange={handleLineItemsSaveState}
+              onEditingChange={setLineItemsEditing}
             />
           </div>
         )}
@@ -742,7 +763,7 @@ export function PurchaseOrderDetail({
             onIssueDrawerOpenChange={setIssueDrawerOpen}
           />
         )}
-        {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'attachments' && <AttachmentsTab po={po} jobId={po.jobId ?? job?.id} />}
       </div>
       {tab !== 'issues' && (
         <IssuePoDrawer

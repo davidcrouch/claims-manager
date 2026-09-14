@@ -4,6 +4,8 @@ export const ALLOWED_MIME_TYPES = [
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  'image/heic',
+  'image/heif',
   'video/mp4',
   'video/quicktime',
   'audio/mpeg',
@@ -23,6 +25,38 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 export const MAX_BATCH_SIZE = 50;
 
 const ALLOWED_SET = new Set(ALLOWED_MIME_TYPES);
+
+/** Extension → MIME fallback for files with empty or missing MIME type. */
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+};
+
+function resolveFileMime(file: File): string | null {
+  if (file.type && ALLOWED_SET.has(file.type)) return file.type;
+  const ext = file.name?.toLowerCase().match(/\.[^.]+$/)?.[0];
+  if (ext && EXTENSION_MIME_MAP[ext]) return EXTENSION_MIME_MAP[ext];
+  return file.type || null;
+}
 
 export type FileCategory = 'image' | 'pdf' | 'word' | 'excel' | 'powerpoint' | 'video' | 'audio' | 'other';
 
@@ -67,7 +101,8 @@ export function validateBatch(files: File[]): string | null {
 }
 
 export function validateFile(file: File): { valid: boolean; error?: string } {
-  if (!file.type || !ALLOWED_SET.has(file.type)) {
+  const resolvedMime = resolveFileMime(file);
+  if (!resolvedMime || !ALLOWED_SET.has(resolvedMime)) {
     return {
       valid: false,
       error: `File type "${file.type || 'unknown'}" is not supported.`,

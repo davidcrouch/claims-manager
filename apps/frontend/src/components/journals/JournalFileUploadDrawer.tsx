@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,6 +27,8 @@ import { usePageContext } from '@/lib/ai/use-page-context';
 import type { JournalPage, JournalPageAttachment, JournalPageBlock } from '@/types/api';
 
 type StagedFile = { id: string; file: File };
+
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 function findUploadTask(tasks: UploadTask[], file: File): UploadTask | undefined {
   return (
@@ -339,6 +341,7 @@ export function JournalFileUploadDrawer({
     const batchError = validateBatch(incoming);
     if (batchError) {
       setError(batchError);
+      toast.error(batchError);
       return;
     }
 
@@ -348,6 +351,7 @@ export function JournalFileUploadDrawer({
       const result = validateFile(file);
       if (!result.valid) {
         errors.push(result.error ?? file.name);
+        toast.error(`${file.name}: ${result.error ?? 'Unsupported file type'}`);
       } else {
         valid.push({ id: crypto.randomUUID(), file });
       }
@@ -437,6 +441,22 @@ export function JournalFileUploadDrawer({
 
   const stagedBytes = files.reduce((sum, b) => sum + b.file.size, 0);
 
+  const handleForceClose = useCallback(() => {
+    resetForm();
+    onOpenChange(false);
+  }, [resetForm, onOpenChange]);
+
+  // Timeout: abort uploads if they never settle.
+  useEffect(() => {
+    if (!submitting) return;
+    const timer = setTimeout(() => {
+      console.warn('[frontend:JournalFileUploadDrawer] Upload timed out');
+      setError('Upload timed out. Please try again.');
+      setSubmitting(false);
+    }, UPLOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [submitting]);
+
   const submitProgressRows = useMemo((): ProcessingRow[] => {
     if (!submitting) return [];
     const rows: ProcessingRow[] = [];
@@ -490,11 +510,18 @@ export function JournalFileUploadDrawer({
       icon={<Upload className="h-5 w-5" />}
       companionChatOpen={companionChatOpen}
       preventClose={submitting || isUploading}
+      onForceClose={handleForceClose}
     >
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
         <BottomFormDrawerBody>
           {!folderMode && !journalId && (
-            <BottomFormDrawerError error="No journal is selected. Ask the assistant to create a site journal first." />
+            <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 px-6 py-8 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
+              <p className="text-sm font-medium text-amber-800">No journal is selected</p>
+              <p className="text-xs text-amber-600">
+                Ask the assistant to create a site journal first, or open an existing journal.
+              </p>
+            </div>
           )}
           <BottomFormDrawerError error={error} />
 
@@ -571,7 +598,7 @@ export function JournalFileUploadDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={submitting}>
+          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button type="submit" disabled={(!folderMode && !journalId) || files.length === 0 || submitting}>

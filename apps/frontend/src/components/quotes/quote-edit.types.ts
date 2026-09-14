@@ -10,6 +10,19 @@ export const QUOTE_TYPES = CW_ESTIMATE_QUOTE_TYPES;
 /** Internal estimate types: Quote | Variation. */
 export const INTERNAL_QUOTE_TYPES = INTERNAL_ESTIMATE_QUOTE_TYPES;
 
+/**
+ * Reason-for-variation options (Crunchwork-style selectable reasons).
+ * "Negative Variation" is the CW-named option for cost/scope reductions.
+ */
+export const REASON_FOR_VARIATION_OPTIONS = [
+  'Additional Damage',
+  'Scope Change',
+  'Cost Adjustment',
+  'Negative Variation',
+] as const;
+
+export type ReasonForVariation = (typeof REASON_FOR_VARIATION_OPTIONS)[number];
+
 export type QuoteTypeOption = (typeof QUOTE_TYPES)[number];
 
 export type PartyDraft = Required<{

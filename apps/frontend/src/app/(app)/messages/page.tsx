@@ -37,8 +37,9 @@ export default async function MessagesPage({
       );
       return null;
     });
-    if (job?.claimId) {
-      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    const parentClaimId = job?.parentClaimId ?? job?.claimId;
+    if (parentClaimId) {
+      parentClaim = await api.getClaim(parentClaimId).catch(() => null);
     }
   }
 

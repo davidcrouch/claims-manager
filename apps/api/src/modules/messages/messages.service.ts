@@ -8,6 +8,7 @@ import {
 import {
   MessagesRepository,
   JobsRepository,
+  ClaimsRepository,
   ExternalLinksRepository,
   ExternalObjectsRepository,
   type MessageInsert,
@@ -21,11 +22,17 @@ import { attachJobSummaries } from '../../common/attach-job-summaries';
 @Injectable()
 export class MessagesService {
   private readonly logger = new Logger('MessagesService');
+  /**
+   * Staging/production: set MESSAGE_ACKNOWLEDGE_ENABLED=true in the Cloud Run
+   * api-server env_vars (deploy/terraform/environments/staging/cloud_run.tf,
+   * module "cloud_run_api" → env_vars block) to enable message acknowledgement.
+   */
   private readonly acknowledgeEnabled = process.env.MESSAGE_ACKNOWLEDGE_ENABLED === 'true';
 
   constructor(
     private readonly messagesRepo: MessagesRepository,
     private readonly jobsRepo: JobsRepository,
+    private readonly claimsRepo: ClaimsRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly tenantContext: TenantContext,
@@ -69,6 +76,34 @@ export class MessagesService {
       tenantId: params.tenantId,
     });
     return job?.externalReference ?? job?.externalJobId ?? undefined;
+  }
+
+  private async resolveProviderClaimId(params: {
+    tenantId: string;
+    internalClaimId?: string | null;
+  }): Promise<string | undefined> {
+    if (!params.internalClaimId) return undefined;
+    const claim = await this.claimsRepo.findByIdAndTenant({
+      id: params.internalClaimId,
+      tenantId: params.tenantId,
+    });
+    return claim?.externalReference ?? claim?.externalClaimId ?? undefined;
+  }
+
+  /** CW parent claim UUID from job payload (vendor allocation hierarchy). */
+  private cwParentClaimIdFromJob(job: {
+    parentClaimId?: string | null;
+    customData?: unknown;
+    apiPayload?: unknown;
+  }): string | undefined {
+    const custom = (job.customData ?? {}) as Record<string, unknown>;
+    const api = (job.apiPayload ?? {}) as Record<string, unknown>;
+    const fromCustom =
+      typeof custom.cwParentClaimId === 'string' ? custom.cwParentClaimId.trim() : '';
+    if (fromCustom) return fromCustom;
+    const fromApi =
+      typeof api.parentClaimId === 'string' ? api.parentClaimId.trim() : '';
+    return fromApi || undefined;
   }
 
   async findAll(params: {
@@ -134,24 +169,63 @@ export class MessagesService {
     const internalFromJobId = (params.body.fromJobId as string | undefined) ?? undefined;
     const internalToJobId = (params.body.toJobId as string | undefined) ?? undefined;
     const internalFromClaimId = (params.body.fromClaimId as string | undefined) ?? undefined;
-    const internalToClaimId = (params.body.toClaimId as string | undefined) ?? undefined;
+    let internalToClaimId = (params.body.toClaimId as string | undefined) ?? undefined;
+
+    // Job-scoped sends: CW toClaimId must be the Job's parentClaimId (insurance claim),
+    // stored as customData.cwParentClaimId / api_payload.parentClaimId when the parent
+    // claim is not projected locally (jobs.parent_claim_id stays null).
+    let cwToClaimIdFromJob: string | undefined;
+    if (internalFromJobId) {
+      const fromJob = await this.jobsRepo.findByIdAndTenant({
+        id: internalFromJobId,
+        tenantId,
+      });
+      if (!fromJob) {
+        throw new BadRequestException(
+          `${logPrefix} — fromJobId not found: ${internalFromJobId}`,
+        );
+      }
+      cwToClaimIdFromJob = this.cwParentClaimIdFromJob(fromJob);
+      // Local FK only when parent claim was projected; do not fall back to vendor claimId.
+      internalToClaimId = fromJob.parentClaimId ?? undefined;
+      this.logger.log(
+        `${logPrefix} — job=${internalFromJobId} cwParentClaimId=${cwToClaimIdFromJob ?? 'none'} parentClaimId=${fromJob.parentClaimId ?? 'none'} claimId=${fromJob.claimId ?? 'none'}`,
+      );
+      if (!cwToClaimIdFromJob && fromJob.parentClaimId) {
+        cwToClaimIdFromJob = await this.resolveProviderClaimId({
+          tenantId,
+          internalClaimId: fromJob.parentClaimId,
+        });
+      }
+      if (!cwToClaimIdFromJob) {
+        throw new BadRequestException(
+          `${logPrefix} — job has no parentClaimId (CW insurance claim) to use as toClaimId`,
+        );
+      }
+    }
+
     this.logger.log(
       `${logPrefix} — incoming keys=${Object.keys(params.body).join(',')} fromJobId=${internalFromJobId ?? 'none'} toJobId=${internalToJobId ?? 'none'} fromClaimId=${internalFromClaimId ?? 'none'} toClaimId=${internalToClaimId ?? 'none'}`,
     );
 
-    const [cwFromJobId, cwToJobId] = await Promise.all([
+    const [cwFromJobId, cwToJobId, cwFromClaimId, cwToClaimIdResolved] = await Promise.all([
       this.resolveProviderJobId({ tenantId, internalJobId: internalFromJobId }),
       this.resolveProviderJobId({ tenantId, internalJobId: internalToJobId }),
+      this.resolveProviderClaimId({ tenantId, internalClaimId: internalFromClaimId }),
+      internalFromJobId
+        ? Promise.resolve(undefined)
+        : this.resolveProviderClaimId({ tenantId, internalClaimId: internalToClaimId }),
     ]);
+    const cwToClaimId = cwToClaimIdFromJob ?? cwToClaimIdResolved;
 
-    if (!cwFromJobId) {
+    if (!cwFromJobId && !cwFromClaimId) {
       throw new BadRequestException(
-        `${logPrefix} — fromJobId must resolve to a provider external reference`,
+        `${logPrefix} — fromJobId or fromClaimId must resolve to a provider external reference`,
       );
     }
-    if (!cwToJobId) {
+    if (!cwToClaimId && !cwToJobId) {
       throw new BadRequestException(
-        `${logPrefix} — toJobId must resolve to a provider external reference`,
+        `${logPrefix} — toClaimId or toJobId must resolve to a provider external reference`,
       );
     }
 
@@ -179,13 +253,21 @@ export class MessagesService {
       messageType: { externalReference: subject },
       text,
       acknowledgementRequired: params.body.acknowledgementRequired === true,
-      fromJobId: cwFromJobId,
-      toJobId: cwToJobId,
-      fromTenantId,
     };
+    if (cwFromJobId) {
+      cwBody.fromJobId = cwFromJobId;
+    } else if (cwFromClaimId) {
+      cwBody.fromClaimId = cwFromClaimId;
+    }
+    // Prefer claim destination (insurance parent claim) over job.
+    if (cwToClaimId) {
+      cwBody.toClaimId = cwToClaimId;
+    } else if (cwToJobId) {
+      cwBody.toJobId = cwToJobId;
+    }
 
     this.logger.log(
-      `${logPrefix} — posting to CW connectionId=${connectionId} messageType=${subject} fromJob=${cwFromJobId} toJob=${cwToJobId} fromTenantId=${fromTenantId}`,
+      `${logPrefix} — posting to CW connectionId=${connectionId} messageType=${subject} fromJob=${cwFromJobId ?? 'none'} fromClaim=${cwFromClaimId ?? 'none'} toClaim=${cwToClaimId ?? 'none'} toJob=${cwToJobId ?? 'none'} fromTenantId=${fromTenantId}`,
     );
 
     const apiMessage = await this.crunchworkService.createMessage({

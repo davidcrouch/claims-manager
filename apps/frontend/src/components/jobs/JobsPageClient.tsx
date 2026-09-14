@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { useHasPermission } from '@/components/providers/PermissionsProvider';
 import { JobsListClient } from './JobsListClient';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
 import type { JobFormClaimOption } from '@/components/forms/job-form-claim';
@@ -37,17 +38,20 @@ export function JobsPageClient({
 }: JobsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const canCreateJob = useHasPermission('jobs.create');
 
   return (
     <>
       <SetHeaderActions>
-        <Button
-          size="default"
-          onClick={() => setDrawerOpen(true)}
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-        >
-          Create Job
-        </Button>
+        {canCreateJob && (
+          <Button
+            size="default"
+            onClick={() => setDrawerOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Create Job
+          </Button>
+        )}
         <PrintButton documentType="jobs_list" entityId="list" />
       </SetHeaderActions>
       <JobsListClient

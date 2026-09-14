@@ -100,19 +100,43 @@ export class VertexGeminiProvider implements CompletionProvider {
     const contents = toGeminiContents(this.logger, request.messages);
     const tools = request.tools ? toGeminiFunctionDeclarations(request.tools) : undefined;
 
-    const response = await this.generateContentWithQuotaRetry({
-      model: this.model,
-      contents,
-      config: {
-        systemInstruction: request.instructions || undefined,
-        temperature: request.temperature,
-        maxOutputTokens: request.maxOutputTokens,
-        ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
-        ...(request.providerOptions?.thinkingConfig
-          ? { thinkingConfig: request.providerOptions.thinkingConfig }
-          : {}),
-      },
-    });
+    let response;
+    try {
+      response = await this.generateContentWithQuotaRetry({
+        model: this.model,
+        contents,
+        config: {
+          systemInstruction: request.instructions || undefined,
+          temperature: request.temperature,
+          maxOutputTokens: request.maxOutputTokens,
+          ...(tools ? { tools: [{ functionDeclarations: tools }] } : {}),
+          ...(request.providerOptions?.thinkingConfig
+            ? { thinkingConfig: request.providerOptions.thinkingConfig }
+            : {}),
+        },
+      });
+    } catch (err) {
+      const errText = err instanceof Error ? err.message : String(err);
+      if (/400|INVALID_ARGUMENT/i.test(errText) && tools && tools.length > 0) {
+        this.logger.warn(
+          `[VertexGeminiProvider.generate] 400 on tool turn — retrying without tools (likely stale thoughtSignature): ${errText}`,
+        );
+        response = await this.generateContentWithQuotaRetry({
+          model: this.model,
+          contents,
+          config: {
+            systemInstruction: request.instructions || undefined,
+            temperature: request.temperature,
+            maxOutputTokens: request.maxOutputTokens,
+            ...(request.providerOptions?.thinkingConfig
+              ? { thinkingConfig: request.providerOptions.thinkingConfig }
+              : {}),
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     const textParts: string[] = [];
     const toolCalls: ToolCall[] = [];

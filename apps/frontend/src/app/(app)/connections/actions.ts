@@ -143,7 +143,12 @@ export async function updateConnectionAction(
 
 export async function getConnectionDocsUrlAction(
   connectionId: string,
-): Promise<{ docsUrl: string; accessToken: string } | null> {
+): Promise<{
+  docsUrl: string;
+  accessToken: string;
+  baseApi: string | null;
+  baseUrl: string | null;
+} | null> {
   const api = await getApi();
   if (!api) return null;
   return api.getConnectionDocsUrl(connectionId);

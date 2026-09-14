@@ -137,8 +137,11 @@ export type CatalogDropTarget = 'table' | 'group' | 'scope' | 'assembly';
  * Hierarchy rules:
  * - group labels → table (top level) only
  * - scopes → groups only (a drop on a nested scope/assembly retargets to that parent group)
- * - assemblies → groups or scopes
- * - primitives → groups, scopes, or assemblies
+ * - assemblies → table (auto-creates default group), groups, or scopes
+ * - primitives → table (auto-creates default group), groups, scopes, or assemblies
+ *
+ * Dropping on `table` auto-creates a default group server-side via
+ * `ensureDefaultPurchaseOrderGroup` so an empty PO / quote is usable.
  */
 export function isValidCatalogDropTarget(
   kind: CatalogDragPayload['kind'],
@@ -146,7 +149,7 @@ export function isValidCatalogDropTarget(
 ): boolean {
   switch (target) {
     case 'table':
-      return false;
+      return kind === 'scope' || kind === 'assembly' || kind === 'primitive';
     case 'group':
       return kind === 'scope' || kind === 'assembly' || kind === 'primitive';
     case 'scope':
@@ -161,16 +164,15 @@ export function isValidCatalogDropTarget(
 /**
  * Where a catalogue item actually lands after remapping.
  * Scopes cannot nest, so any accepted drop of a scope becomes a group drop.
+ * Drops on `table` resolve to `group` — the server auto-creates one when none exist.
  */
 export function resolveCatalogDropDestination(
   kind: CatalogDragPayload['kind'],
   target: CatalogDropTarget,
 ): Exclude<CatalogDropTarget, 'table'> | null {
-  if (kind === 'scope') {
-    if (target === 'table') return null;
-    return 'group';
-  }
-  if (!isValidCatalogDropTarget(kind, target) || target === 'table') return null;
+  if (!isValidCatalogDropTarget(kind, target)) return null;
+  if (target === 'table') return 'group';
+  if (kind === 'scope') return 'group';
   return target;
 }
 
