@@ -431,7 +431,21 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
     });
 
     expect(createQuote).not.toHaveBeenCalled();
-    expect(updateQuote).toHaveBeenCalledTimes(1);
+    expect(updateQuote).toHaveBeenCalledTimes(2);
+    expect(updateQuote).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        quoteId: CW_QUOTE_ID,
+        body: { name: 'Estimate 1' },
+      }),
+    );
+    expect(updateQuote).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        quoteId: CW_QUOTE_ID,
+        body: { status: { name: 'Published', externalReference: 'Published' } },
+      }),
+    );
   });
 
   it('persists the created quote id so a later retry does not create again', async () => {
@@ -441,6 +455,10 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
     });
     updateQuote
       .mockRejectedValueOnce(new Error('status update failed'))
+      .mockResolvedValueOnce({
+        id: CW_QUOTE_ID,
+        status: { name: 'Published', externalReference: 'Published' },
+      })
       .mockResolvedValueOnce({
         id: CW_QUOTE_ID,
         status: { name: 'Published', externalReference: 'Published' },
@@ -476,6 +494,7 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
     });
 
     expect(createQuote).toHaveBeenCalledTimes(1);
-    expect(updateQuote).toHaveBeenCalledTimes(2);
+    // First attempt: status update fails (1). Retry with cwQuoteId: content then status (2).
+    expect(updateQuote).toHaveBeenCalledTimes(3);
   });
 });
