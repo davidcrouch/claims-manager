@@ -171,6 +171,7 @@ export async function createRfqSendRequestAction(
     emailSubject?: string;
     emailBodyHtml?: string;
     emailBodyText?: string;
+    additionalDocumentIds?: string[];
   },
 ): Promise<{ success: boolean; data?: RfqSendRequestDetail; error?: string }> {
   const api = await getApi();

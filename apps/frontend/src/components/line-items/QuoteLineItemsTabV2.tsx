@@ -83,6 +83,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     hideToolbarActions = false,
     onUndoCapture,
     onSaveStateChange,
+    onEditingChange,
   }: {
     quote: Quote;
     drawerOpen: boolean;

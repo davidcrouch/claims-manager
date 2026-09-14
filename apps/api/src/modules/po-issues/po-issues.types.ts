@@ -8,6 +8,8 @@ export interface CreatePoIssueRequestDto {
   emailSubject?: string;
   emailBodyHtml?: string;
   emailBodyText?: string;
+  /** Optional project document IDs to attach alongside the generated PO (accepted; attach wiring may follow). */
+  additionalDocumentIds?: string[];
 }
 
 export interface RetryPoIssueRequestDto {

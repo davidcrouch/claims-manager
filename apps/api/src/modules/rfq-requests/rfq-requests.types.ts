@@ -8,6 +8,7 @@ export interface CreateSendRequestDto {
   emailSubject?: string;
   emailBodyHtml?: string;
   emailBodyText?: string;
+  additionalDocumentIds?: string[];
 }
 
 export interface RetrySendRequestDto {

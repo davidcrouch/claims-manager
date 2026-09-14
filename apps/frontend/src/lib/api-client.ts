@@ -3410,6 +3410,7 @@ export function createApiClient(options?: ApiClientOptions) {
         emailSubject?: string;
         emailBodyHtml?: string;
         emailBodyText?: string;
+        additionalDocumentIds?: string[];
       },
     ): Promise<RfqSendRequestDetail> {
       return fetchApi<RfqSendRequestDetail>(`/rfqs/${rfqId}/send-requests`, {
@@ -3447,6 +3448,7 @@ export function createApiClient(options?: ApiClientOptions) {
         emailSubject?: string;
         emailBodyHtml?: string;
         emailBodyText?: string;
+        additionalDocumentIds?: string[];
       },
     ): Promise<PoIssueRequestDetail> {
       return fetchApi<PoIssueRequestDetail>(`/purchase-orders/${poId}/issue-requests`, {

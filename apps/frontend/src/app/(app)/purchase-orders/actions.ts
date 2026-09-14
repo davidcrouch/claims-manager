@@ -546,6 +546,7 @@ export async function createPoIssueRequestAction(
     emailSubject?: string;
     emailBodyHtml?: string;
     emailBodyText?: string;
+    additionalDocumentIds?: string[];
   },
 ): Promise<{ success: boolean; data?: PoIssueRequestDetail; error?: string }> {
   const api = await getApi();
