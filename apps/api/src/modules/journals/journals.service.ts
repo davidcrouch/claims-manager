@@ -28,6 +28,8 @@ import { JournalImageGenerationService } from './journal-image-generation.servic
 
 const VALID_ENTITY_TYPES = ['Job', 'Quote', 'Invoice'];
 
+const LOCKED_JOURNAL_STATUSES = new Set(['archived', 'deleted', 'locked']);
+
 const ALLOWED_MIME_PREFIXES = [
   'image/',
   'video/',
@@ -103,6 +105,16 @@ export class JournalsService {
     return this.journalsRepo.findByEntity({ tenantId, ...params });
   }
 
+  private isJournalLocked(status: string | null | undefined): boolean {
+    return LOCKED_JOURNAL_STATUSES.has((status ?? '').trim().toLowerCase());
+  }
+
+  private assertJournalEditable(journal: { status: string }) {
+    if (this.isJournalLocked(journal.status)) {
+      throw new BadRequestException('Journal is locked and cannot be edited');
+    }
+  }
+
   private addressColumnsFromPayload(address?: Record<string, unknown>) {
     const payload =
       address && typeof address === 'object' && !Array.isArray(address) ? address : {};
@@ -147,6 +159,17 @@ export class JournalsService {
     if (!existing) throw new NotFoundException('Journal not found');
 
     const { dto, userId } = params;
+    const contentTouched =
+      dto.name !== undefined ||
+      dto.description !== undefined ||
+      dto.address !== undefined ||
+      dto.latitude !== undefined ||
+      dto.longitude !== undefined ||
+      dto.metadata !== undefined;
+    if (contentTouched) {
+      this.assertJournalEditable(existing);
+    }
+
     const addressCols =
       dto.address !== undefined ? this.addressColumnsFromPayload(dto.address) : null;
 
@@ -351,6 +374,7 @@ export class JournalsService {
     const tenantId = this.tenantContext.getTenantId();
     const journal = await this.journalsRepo.findOne({ id: params.journalId, tenantId });
     if (!journal) throw new NotFoundException('Journal not found');
+    this.assertJournalEditable(journal);
 
     const { dto, userId } = params;
     const sortIndex = await this.pagesRepo.getNextSortIndex({ journalId: params.journalId, tenantId });
@@ -387,6 +411,10 @@ export class JournalsService {
 
   async updatePage(params: { journalId: string; pageId: string; dto: UpdateJournalPageDto }) {
     const tenantId = this.tenantContext.getTenantId();
+    const journal = await this.journalsRepo.findOne({ id: params.journalId, tenantId });
+    if (!journal) throw new NotFoundException('Journal not found');
+    this.assertJournalEditable(journal);
+
     const page = await this.pagesRepo.findOne({ id: params.pageId, tenantId });
     if (!page || page.journalId !== params.journalId) {
       throw new NotFoundException('Journal page not found');
@@ -428,6 +456,10 @@ export class JournalsService {
 
   async deletePage(params: { journalId: string; pageId: string }) {
     const tenantId = this.tenantContext.getTenantId();
+    const journal = await this.journalsRepo.findOne({ id: params.journalId, tenantId });
+    if (!journal) throw new NotFoundException('Journal not found');
+    this.assertJournalEditable(journal);
+
     const page = await this.pagesRepo.findOne({ id: params.pageId, tenantId });
     if (!page || page.journalId !== params.journalId) {
       throw new NotFoundException('Journal page not found');
@@ -440,6 +472,7 @@ export class JournalsService {
     const tenantId = this.tenantContext.getTenantId();
     const journal = await this.journalsRepo.findOne({ id: params.journalId, tenantId });
     if (!journal) throw new NotFoundException('Journal not found');
+    this.assertJournalEditable(journal);
     await this.pagesRepo.reorder({ journalId: params.journalId, tenantId, pageIds: params.pageIds });
     return { reordered: true };
   }
@@ -453,6 +486,10 @@ export class JournalsService {
     userId: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
+    const journal = await this.journalsRepo.findOne({ id: params.journalId, tenantId });
+    if (!journal) throw new NotFoundException('Journal not found');
+    this.assertJournalEditable(journal);
+
     const page = await this.pagesRepo.findOne({ id: params.pageId, tenantId });
     if (!page || page.journalId !== params.journalId) {
       throw new NotFoundException('Journal page not found');

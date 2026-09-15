@@ -94,14 +94,17 @@ export async function updateJournalAction(
   data: {
     name?: string;
     description?: string;
+    address?: AddressPayload;
+    latitude?: number;
+    longitude?: number;
     metadata?: Record<string, unknown>;
   },
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; journal?: Journal; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
-    await api.updateJournal(journalId, data);
-    return { success: true };
+    const journal = await api.updateJournal(journalId, data);
+    return { success: true, journal };
   } catch (err) {
     console.error('[journals/actions.updateJournalAction]', err);
     return {

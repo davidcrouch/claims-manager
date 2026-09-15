@@ -160,7 +160,7 @@ Legend: **Partial** = some code exists · **New** = greenfield · **Docs** · **
 |-------|--------|
 | feature | Partial |
 
-**Proposed solution:** Add edit for journal header/metadata (title, visit date, notes) via existing journal form patterns; keep page content editing as-is (`PageEntryDrawer`). Soft-constrain edits after publish/sync if CW linkage requires it.
+**Proposed solution:** Match other detail pages: Name / Description / Visit date are always editable inline, changes autosave after debounce, header shows save status + **Undo** (same pattern as jobs/contacts). Keep page content editing as-is (`PageEntryDrawer`). Soft-constrain edits after publish/sync if CW linkage requires it.
 
 ---
 

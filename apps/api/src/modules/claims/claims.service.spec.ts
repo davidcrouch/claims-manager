@@ -149,6 +149,41 @@ describe('ClaimsService', () => {
     });
   });
 
+  describe('findOne', () => {
+    it('should attach insured name for the claim', async () => {
+      mockClaimsRepo.findOne.mockResolvedValueOnce({
+        id: 'claim-1',
+        tenantId: 'tenant-1',
+        statusLookupId: 'st-1',
+        accountLookupId: null,
+        statusName: 'Open',
+        statusExternalReference: null,
+        accountName: null,
+        accountExternalReference: null,
+      });
+      mockClaimsRepo.findInsuredNamesByClaimIds.mockResolvedValueOnce([
+        { claimId: 'claim-1', insuredName: 'Jane Doe' },
+      ]);
+
+      const result = await service.findOne({ id: 'claim-1' });
+
+      expect(mockClaimsRepo.findInsuredNamesByClaimIds).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        claimIds: ['claim-1'],
+      });
+      expect(result?.insuredName).toBe('Jane Doe');
+    });
+
+    it('should return null when claim is missing', async () => {
+      mockClaimsRepo.findOne.mockResolvedValueOnce(null);
+
+      const result = await service.findOne({ id: 'missing' });
+
+      expect(result).toBeNull();
+      expect(mockClaimsRepo.findInsuredNamesByClaimIds).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     it('should create claim via Crunchwork and persist locally', async () => {
       const body = { claimNumber: 'CLM-001', account: { externalReference: 'ACC001' } };

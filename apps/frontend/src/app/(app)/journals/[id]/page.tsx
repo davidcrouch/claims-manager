@@ -1,8 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JournalDetailClient } from '@/components/journals/JournalDetailClient';
-import { JournalPageHeader } from '@/components/journals/JournalHeader';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -46,12 +44,5 @@ export default async function JournalDetailPage({
     total: 0,
   }));
 
-  return (
-    <>
-      <SetPageHeader>
-        <JournalPageHeader journal={journal} job={job} entryCount={pagesResult.total} />
-      </SetPageHeader>
-      <JournalDetailClient journal={journal} initialPages={pagesResult} job={job} />
-    </>
-  );
+  return <JournalDetailClient journal={journal} initialPages={pagesResult} job={job} />;
 }

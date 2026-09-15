@@ -14,6 +14,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   BottomFormDrawer,
@@ -69,6 +70,8 @@ export function PageEntryDrawer({
   onCreated,
 }: PageEntryDrawerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [entryName, setEntryName] = useState('');
+  const [entryDescription, setEntryDescription] = useState('');
   const [blocks, setBlocks] = useState<ContentDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -203,6 +206,8 @@ export function PageEntryDrawer({
   }, [uploadTasks]);
 
   const resetForm = useCallback(() => {
+    setEntryName('');
+    setEntryDescription('');
     setBlocks([]);
     setError(null);
     setSubmitting(false);
@@ -333,6 +338,8 @@ export function PageEntryDrawer({
   const uploadCount = blocks.filter((b) => b.type === 'upload').length;
   const noteCount = blocks.filter((b) => b.type === 'note').length;
   const hasContent =
+    entryName.trim().length > 0 ||
+    entryDescription.trim().length > 0 ||
     blocks.some((b) => b.type === 'upload') ||
     blocks.some((b) => b.type === 'note' && b.text.trim());
   const canSubmit = hasContent && !submitting;
@@ -340,7 +347,7 @@ export function PageEntryDrawer({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasContent) {
-      setError('Add at least one note or upload');
+      setError('Add a name, description, note, or upload');
       return;
     }
 
@@ -359,6 +366,7 @@ export function PageEntryDrawer({
         .join('\n\n');
 
       const page = await api.createJournalPage(journalId, {
+        name: entryName.trim() || undefined,
         body: body || undefined,
         bodyFormat: 'plaintext',
         latitude: location?.latitude,
@@ -371,6 +379,9 @@ export function PageEntryDrawer({
             type: 'note' as const,
             text: b.text.trim(),
           })),
+        metadata: entryDescription.trim()
+          ? { description: entryDescription.trim() }
+          : undefined,
       });
 
       pendingPageRef.current = page;
@@ -395,6 +406,9 @@ export function PageEntryDrawer({
           ...page,
           metadata: {
             ...page.metadata,
+            ...(entryDescription.trim()
+              ? { description: entryDescription.trim() }
+              : {}),
             blocks: pendingBlocksRef.current,
           },
         };
@@ -503,11 +517,33 @@ export function PageEntryDrawer({
       open={open}
       onOpenChange={handleOpenChange}
       title="Add Entry"
-      description="Build a running list of notes and uploads in any order."
+      description="Set a name and description, then add notes and uploads in any order."
       icon={<FilePlus2 className="h-5 w-5" />}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
+          <div className="mb-5 space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Name</label>
+              <Input
+                value={entryName}
+                onChange={(e) => setEntryName(e.target.value)}
+                placeholder="Entry name"
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Description</label>
+              <Textarea
+                value={entryDescription}
+                onChange={(e) => setEntryDescription(e.target.value)}
+                placeholder="Short description"
+                rows={2}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+
           <div className="mb-5 flex items-center gap-2">
             <Button
               type="button"

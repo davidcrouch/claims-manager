@@ -71,3 +71,60 @@ export function attachmentThumbSrc(attachment: JournalPageAttachment): string | 
 export function countNoteBlocks(page: JournalPage): number {
   return resolvePageBlocks(page).filter((b) => b.type === 'note').length;
 }
+
+export function pageEntryName(page: JournalPage): string {
+  const name = page.metadata?.name;
+  return typeof name === 'string' ? name : '';
+}
+
+export function pageEntryDescription(page: JournalPage): string {
+  const description = page.metadata?.description;
+  return typeof description === 'string' ? description : '';
+}
+
+/** Combined note-block text, falling back to page body. */
+export function pageEntryNotesText(page: JournalPage): string {
+  const notes = resolvePageBlocks(page)
+    .filter((b): b is ResolvedNoteBlock => b.type === 'note')
+    .map((b) => b.text.trim())
+    .filter(Boolean);
+  if (notes.length > 0) return notes.join('\n\n');
+  return typeof page.body === 'string' ? page.body : '';
+}
+
+/**
+ * Replace note blocks with a single note (when text is non-empty), preserving
+ * upload blocks and the relative position of the first note.
+ */
+export function blocksWithNotesText(
+  page: JournalPage,
+  notesText: string,
+): JournalPageBlock[] {
+  const existing = resolvePageBlocks(page);
+  const trimmed = notesText.trim();
+  const uploadBlocks: JournalPageBlock[] = existing
+    .filter((b): b is ResolvedUploadBlock => b.type === 'upload')
+    .map((b) => ({ id: b.id, type: 'upload' as const, attachmentId: b.attachmentId }));
+
+  if (!trimmed) return uploadBlocks;
+
+  const firstNoteIndex = existing.findIndex((b) => b.type === 'note');
+  const noteId =
+    firstNoteIndex >= 0 && existing[firstNoteIndex].type === 'note'
+      ? existing[firstNoteIndex].id
+      : crypto.randomUUID();
+  const noteBlock: JournalPageBlock = { id: noteId, type: 'note', text: trimmed };
+
+  if (firstNoteIndex < 0) return [noteBlock, ...uploadBlocks];
+
+  const uploadsBefore = existing
+    .slice(0, firstNoteIndex)
+    .filter((b): b is ResolvedUploadBlock => b.type === 'upload')
+    .map((b) => ({ id: b.id, type: 'upload' as const, attachmentId: b.attachmentId }));
+  const uploadsAfter = existing
+    .slice(firstNoteIndex + 1)
+    .filter((b): b is ResolvedUploadBlock => b.type === 'upload')
+    .map((b) => ({ id: b.id, type: 'upload' as const, attachmentId: b.attachmentId }));
+
+  return [...uploadsBefore, noteBlock, ...uploadsAfter];
+}

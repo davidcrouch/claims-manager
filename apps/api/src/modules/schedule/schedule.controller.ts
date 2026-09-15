@@ -17,6 +17,7 @@ export class ScheduleController {
     @Query('jobId') jobId?: string,
     @Query('mine') mine?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('assignedToUserIds') assignedToUserIds?: string,
     @Query('limit') limit?: string,
     @CurrentUser('sub') userId?: string,
   ) {
@@ -35,16 +36,14 @@ export class ScheduleController {
       : undefined;
 
     const mineOnly = mine === '1' || mine === 'true';
-    const assigneeFilter = mineOnly
-      ? userId
-      : assignedToUserId?.trim() || undefined;
 
     return this.scheduleService.findEvents({
       from,
       to,
       eventType: types,
       jobId,
-      assignedToUserId: assigneeFilter,
+      assignedToUserId: mineOnly ? userId : assignedToUserId?.trim() || undefined,
+      assignedToUserIds: mineOnly ? undefined : assignedToUserIds?.trim() || undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }

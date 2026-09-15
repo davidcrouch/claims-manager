@@ -99,7 +99,17 @@ export class ClaimsService {
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const claim = await this.claimsRepo.findOne({ id: params.id, tenantId });
-    return claim ? this.shapeClaimResponse(claim) : null;
+    if (!claim) return null;
+
+    const insuredRows = await this.claimsRepo.findInsuredNamesByClaimIds({
+      tenantId,
+      claimIds: [claim.id],
+    });
+
+    return {
+      ...this.shapeClaimResponse(claim),
+      insuredName: insuredRows[0]?.insuredName ?? null,
+    };
   }
 
   private shapeClaimResponse(row: ClaimViewRow) {

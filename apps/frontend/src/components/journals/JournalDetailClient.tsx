@@ -6,12 +6,16 @@ import { LayoutList, Plus, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
-import { JournalOverview } from './JournalOverview';
+import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
+import { JournalOverview, type JournalAutosaveChrome } from './JournalOverview';
+import { JournalPageHeader } from './JournalHeader';
 import { JournalEntriesPanel } from './JournalEntriesPanel';
 import { PageEntryDrawer } from './PageEntryDrawer';
 import { useApiClient } from '@/hooks/useApiClient';
+import { isJournalLocked } from './journal-lock';
 import type { Job, Journal, JournalPage } from '@/types/api';
 
 const VALID_TABS = ['overview', 'entries'] as const;
@@ -40,6 +44,8 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
   const [selectedPageId, setSelectedPageId] = useState<string | null>(
     initialPages.data[0]?.id ?? null,
   );
+  const [autosaveChrome, setAutosaveChrome] = useState<JournalAutosaveChrome | null>(null);
+  const locked = isJournalLocked(journal.status);
 
   const onTabChange = useCallback(
     (value: TabValue) => {
@@ -62,6 +68,19 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
     onTabChange('entries');
   };
 
+  const handlePageUpdated = useCallback((page: JournalPage) => {
+    setPages((prev) => prev.map((p) => (p.id === page.id ? page : p)));
+  }, []);
+
+  const handleAutosaveChromeChange = useCallback((chrome: JournalAutosaveChrome) => {
+    setAutosaveChrome(chrome);
+  }, []);
+
+  const headerJournal: Journal = {
+    ...journal,
+    name: autosaveChrome?.draftName?.trim() || journal.name,
+  };
+
   const tabs: Array<{ id: TabValue; label: string; icon: typeof ScrollText; count?: number }> = [
     { id: 'overview', label: 'Overview', icon: ScrollText },
     { id: 'entries', label: 'Entries', icon: LayoutList, count: totalCount },
@@ -69,8 +88,11 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
 
   return (
     <div className="flex flex-col">
+      <SetPageHeader>
+        <JournalPageHeader journal={headerJournal} job={job} entryCount={totalCount} />
+      </SetPageHeader>
       <SetHeaderActions>
-        {api && (
+        {api && !locked && (
           <Button
             size="default"
             onClick={() => setEntryDrawerOpen(true)}
@@ -81,12 +103,19 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
           </Button>
         )}
         <HeaderActionToolbar>
+          {!locked && (
+            <DetailUndoButton
+              canUndo={Boolean(autosaveChrome?.canUndo)}
+              undoDisabled={autosaveChrome?.undoDisabled}
+              onUndo={() => autosaveChrome?.onUndo()}
+            />
+          )}
           <PrintButton documentType="journal" entityId={journal.id} jobId={job?.id} />
           <ArchiveEntityButton
             entityType="journal"
             entityId={journal.id}
             statusName={journal.status}
-            entityLabel={journal.name}
+            entityLabel={headerJournal.name}
             redirectTo="/journals"
           />
         </HeaderActionToolbar>
@@ -128,20 +157,30 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
       </div>
 
       <div className="pt-4">
-        {activeTab === 'overview' && (
-          <JournalOverview journal={journal} entryCount={totalCount} job={job} />
-        )}
+        {/* Keep overview mounted so draft/undo survive tab switches. */}
+        <div className={activeTab === 'overview' ? '' : 'hidden'}>
+          <JournalOverview
+            journal={journal}
+            entryCount={totalCount}
+            job={job}
+            onAutosaveChromeChange={handleAutosaveChromeChange}
+          />
+        </div>
         {activeTab === 'entries' && (
           <JournalEntriesPanel
             pages={pages}
             selectedPageId={selectedPageId}
             onSelectPage={setSelectedPageId}
-            onAddEntry={api ? () => setEntryDrawerOpen(true) : undefined}
+            onAddEntry={api && !locked ? () => setEntryDrawerOpen(true) : undefined}
+            journalId={journal.id}
+            api={api}
+            onPageUpdated={handlePageUpdated}
+            locked={locked}
           />
         )}
       </div>
 
-      {api && (
+      {api && !locked && (
         <PageEntryDrawer
           open={entryDrawerOpen}
           onOpenChange={setEntryDrawerOpen}

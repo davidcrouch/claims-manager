@@ -158,7 +158,7 @@ function TasksListLoadingPanel({ columnCount }: { columnCount: number }) {
   const cells = Math.max(columnCount, 1);
   return (
     <div
-      className="relative min-h-[75vh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+      className="relative min-h-[75vh] overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm"
       role="status"
       aria-live="polite"
       aria-busy="true"
@@ -886,7 +886,7 @@ export function TasksListClient({
         {loading ? (
           <TasksListLoadingPanel columnCount={visibleTableColumns.length + 1} />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">

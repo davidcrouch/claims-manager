@@ -152,8 +152,8 @@ function OverviewTab({ claim }: { claim: Claim }) {
             value={claim.externalClaimId ?? '—'}
           />
           <DefRow
-            label="Crunchwork ID"
-            value={claim.externalReference ?? '—'}
+            label="Insured party"
+            value={claim.insuredName?.trim() || '—'}
           />
           <DefRow
             label="Account"
@@ -868,6 +868,7 @@ function TimelineTab({ claim }: { claim: Claim }) {
 
 export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const title = claim.claimNumber ?? claim.externalReference ?? claim.id;
+  const insuredName = claim.insuredName?.trim() || undefined;
   const api = getApi(claim);
   const statusName =
     (claim.status as { name?: string })?.name ??
@@ -890,6 +891,7 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
         />
       }
       title={title}
+      subtitle={insuredName}
       topRow={
         <>
           <StatusBadge status={statusName} />

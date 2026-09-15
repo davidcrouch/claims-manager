@@ -385,7 +385,9 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     description: 'Specialists',
     fillSchema: {
       specialistRequired: z.boolean().optional().describe('Specialist required'),
-      specialistType: z.string().optional().describe('Specialist type'),
+      specialistType: z.string().optional().describe('Specialist type (comma-joined; Other may include free text)'),
+      specialistTypes: z.array(z.string()).optional().describe('Specialist type checkboxes'),
+      specialistOther: z.string().optional().describe('Free-form text when Other specialist type is selected'),
     },
   });
 

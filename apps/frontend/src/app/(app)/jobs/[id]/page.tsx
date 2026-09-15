@@ -81,7 +81,7 @@ export default async function JobDetailPage({
       ? { search: job.internalNumber.trim(), limit: 50 }
       : null;
 
-  const [parentClaim, statusOptions, jobTypeLookups, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult, siblingJobsResult] =
+  const [parentClaim, statusOptions, jobTypeLookups, contactTypeOptions, assessmentsResult, siblingJobsResult] =
     await Promise.all([
       job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
     // All providers: synced CW statuses often have provider_code null, while
@@ -115,8 +115,6 @@ export default async function JobDetailPage({
         }),
     ]).then(([crunchwork, direct]) => ({ crunchwork, direct })),
     api.getLookupsByDomain('contact_type').catch(() => []),
-    api.getLookupsByDomain('report_status').catch(() => []),
-    api.getLookupsByDomain('report_type').catch(() => []),
     api.getAssessments({ jobId: id, limit: 10 }).catch((err: unknown) => {
       console.warn(
         'frontend:JobDetailPage - getAssessments failed:',
@@ -182,8 +180,6 @@ export default async function JobDetailPage({
         statusOptions={toOptions(statusOptions)}
         jobTypeOptions={toOptions(jobTypeOptions)}
         contactTypeOptions={toOptions(contactTypeOptions)}
-        reportStatusOptions={toOptions(reportStatusOptions)}
-        reportTypeOptions={toOptions(reportTypeOptions)}
         assessments={assessmentsResult.data}
         makeSafeJobType={makeSafeJobType}
         existingMakeSafeJobId={existingMakeSafeJob?.id ?? null}

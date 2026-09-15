@@ -2283,7 +2283,7 @@ export function createApiClient(options?: ApiClientOptions) {
       name?: string;
       description?: string;
       status?: string;
-      address?: Record<string, unknown>;
+      address?: AddressPayload;
       latitude?: number;
       longitude?: number;
       metadata?: Record<string, unknown>;
@@ -2479,6 +2479,7 @@ export function createApiClient(options?: ApiClientOptions) {
       jobId?: string;
       mine?: boolean;
       assignedToUserId?: string;
+      assignedToUserIds?: string;
       limit?: number;
     }): Promise<{ data: import('@/types/api').ScheduleEvent[]; total: number }> {
       const sp = new URLSearchParams();
@@ -2488,6 +2489,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.jobId) sp.set('jobId', params.jobId);
       if (params.mine) sp.set('mine', 'true');
       if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
+      if (params.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
       if (params.limit != null) sp.set('limit', String(params.limit));
       return fetchApi(`/schedule/events?${sp}`);
     },
@@ -3529,7 +3531,10 @@ export function createApiClient(options?: ApiClientOptions) {
       type?: string;
       status?: string;
       priority?: string;
+      reportedBy?: string;
+      pageLabel?: string;
       search?: string;
+      sort?: string;
     }): Promise<{ data: FeedbackItem[]; total: number }> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -3537,7 +3542,10 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.type) sp.set('type', params.type);
       if (params.status) sp.set('status', params.status);
       if (params.priority) sp.set('priority', params.priority);
+      if (params.reportedBy) sp.set('reportedBy', params.reportedBy);
+      if (params.pageLabel) sp.set('pageLabel', params.pageLabel);
       if (params.search) sp.set('search', params.search);
+      if (params.sort) sp.set('sort', params.sort);
       const qs = sp.toString();
       return fetchApi<{ data: FeedbackItem[]; total: number }>(
         `/feedback${qs ? `?${qs}` : ''}`,
@@ -3546,6 +3554,16 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getFeedbackStats(): Promise<FeedbackStats> {
       return fetchApi<FeedbackStats>('/feedback/stats');
+    },
+
+    getFeedbackFilterOptions(): Promise<{
+      reporters: { id: string; name: string }[];
+      pages: string[];
+    }> {
+      return fetchApi<{
+        reporters: { id: string; name: string }[];
+        pages: string[];
+      }>('/feedback/filter-options');
     },
 
     getFeedbackById(id: string): Promise<FeedbackItem> {

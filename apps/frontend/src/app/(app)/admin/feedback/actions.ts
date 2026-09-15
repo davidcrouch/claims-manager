@@ -22,7 +22,10 @@ export async function fetchFeedbackAction(params: {
   type?: string;
   status?: string;
   priority?: string;
+  reportedBy?: string;
+  pageLabel?: string;
   search?: string;
+  sort?: string;
 }): Promise<{ data: FeedbackItem[]; total: number }> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -42,6 +45,20 @@ export async function fetchFeedbackStatsAction(): Promise<FeedbackStats> {
   } catch (err) {
     console.error('[admin/feedback/actions.fetchFeedbackStatsAction]', err);
     return { byStatus: {}, byType: {}, total: 0 };
+  }
+}
+
+export async function fetchFeedbackFilterOptionsAction(): Promise<{
+  reporters: { id: string; name: string }[];
+  pages: string[];
+}> {
+  const api = await getApi();
+  if (!api) return { reporters: [], pages: [] };
+  try {
+    return await api.getFeedbackFilterOptions();
+  } catch (err) {
+    console.error('[admin/feedback/actions.fetchFeedbackFilterOptionsAction]', err);
+    return { reporters: [], pages: [] };
   }
 }
 

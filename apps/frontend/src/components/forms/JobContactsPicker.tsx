@@ -84,6 +84,8 @@ export function JobContactsPicker({
   description = 'Search existing contacts or add a new one. Contacts are optional.',
   newContactLabel = 'New contact',
   defaultTypeRefs,
+  contactsListClassName = 'space-y-2',
+  contactItemClassName = 'rounded-md border px-3 py-2 text-sm',
 }: {
   contacts: JobContactRef[];
   onAdd: (contact: JobContactRef) => void;
@@ -101,6 +103,10 @@ export function JobContactsPicker({
    * When omitted, all types are included (unrestricted search).
    */
   defaultTypeRefs?: string[];
+  /** Optional class for the staged contacts list container. */
+  contactsListClassName?: string;
+  /** Optional class for each staged contact card. */
+  contactItemClassName?: string;
 }) {
   const selectedIds = [
     ...excludeIds,
@@ -133,13 +139,13 @@ export function JobContactsPicker({
       </div>
 
       {contacts.length > 0 && (
-        <ul className="space-y-2">
+        <ul className={contactsListClassName}>
           {contacts.map((c) => {
             const locked = lockedKeys?.has(c.key) ?? false;
             return (
               <li
                 key={c.key}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                className={`flex items-start justify-between gap-2 ${contactItemClassName}`}
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -148,7 +154,7 @@ export function JobContactsPicker({
                     </span>
                   </div>
                   {(c.email || c.mobilePhone) && (
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-muted-foreground">
+                    <div className="mt-0.5 flex flex-col gap-0.5 break-all text-muted-foreground">
                       {c.email && <span>{c.email}</span>}
                       {c.mobilePhone && <span>{c.mobilePhone}</span>}
                     </div>
@@ -158,7 +164,7 @@ export function JobContactsPicker({
                   <button
                     type="button"
                     onClick={() => onRemove(c.key)}
-                    className="rounded p-1 hover:bg-destructive/10"
+                    className="shrink-0 rounded p-1 hover:bg-destructive/10"
                     aria-label="Remove contact"
                   >
                     <X className="h-4 w-4 text-muted-foreground" />

@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
+import { normalizeListUserIds } from '../../common/list-job-filter';
 
 type ScheduleEventRow = {
   id: string;
@@ -17,6 +18,13 @@ type ScheduleEventRow = {
   [key: string]: unknown;
 };
 
+function uuidInList(userIds: string[]) {
+  return sql`IN (${sql.join(
+    userIds.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  )})`;
+}
+
 @Injectable()
 export class ScheduleService {
   private readonly logger = new Logger(ScheduleService.name);
@@ -31,8 +39,10 @@ export class ScheduleService {
     to: string;
     eventType?: string[];
     jobId?: string;
-    /** When set, only events assigned to this user (or on a job assigned to them). */
+    /** Single user (legacy); prefer assignedToUserIds. */
     assignedToUserId?: string;
+    /** Comma-separated user ids. */
+    assignedToUserIds?: string;
     limit?: number;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -47,35 +57,43 @@ export class ScheduleService {
       ? sql`AND job_id = ${params.jobId}::uuid`
       : sql``;
 
-    const userId = params.assignedToUserId?.trim();
-    const assignedFilter = userId
-      ? sql`AND (
+    const userIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
+
+    let assignedFilter = sql``;
+    if (userIds) {
+      if (userIds.length === 0) {
+        assignedFilter = sql`AND false`;
+      } else {
+        assignedFilter = sql`AND (
           -- Direct assignees
           (event_type = 'task' AND EXISTS (
             SELECT 1 FROM tasks t
-            WHERE t.id = schedule_events.id AND t.assigned_to_user_id = ${userId}
+            WHERE t.id = schedule_events.id AND t.assigned_to_user_id ${uuidInList(userIds)}
           ))
           OR (event_type = 'job' AND EXISTS (
             SELECT 1 FROM jobs j
-            WHERE j.id = schedule_events.id AND j.assigned_to_user_id = ${userId}
+            WHERE j.id = schedule_events.id AND j.assigned_to_user_id ${uuidInList(userIds)}
           ))
           OR (event_type = 'quote' AND EXISTS (
             SELECT 1 FROM quotes q
-            WHERE q.id = schedule_events.id AND q.assigned_to_user_id = ${userId}
+            WHERE q.id = schedule_events.id AND q.assigned_to_user_id ${uuidInList(userIds)}
           ))
           OR (event_type = 'message' AND EXISTS (
             SELECT 1 FROM messages m
-            WHERE m.id = schedule_events.id AND m.to_user_id = ${userId}
+            WHERE m.id = schedule_events.id AND m.to_user_id ${uuidInList(userIds)}
           ))
           OR (event_type = 'claim' AND EXISTS (
             SELECT 1 FROM claim_assignees ca
-            WHERE ca.claim_id = schedule_events.id AND ca.user_id = ${userId}
+            WHERE ca.claim_id = schedule_events.id AND ca.user_id ${uuidInList(userIds)}
           ))
           OR (event_type = 'appointment' AND EXISTS (
             SELECT 1 FROM appointment_attendees aa
-            WHERE aa.appointment_id = schedule_events.id AND aa.user_id = ${userId}
+            WHERE aa.appointment_id = schedule_events.id AND aa.user_id ${uuidInList(userIds)}
           ))
-          -- Job-linked work assigned to the user
+          -- Job-linked work assigned to a selected user
           OR (
             job_id IS NOT NULL
             AND event_type IN (
@@ -84,10 +102,10 @@ export class ScheduleService {
             )
             AND EXISTS (
               SELECT 1 FROM jobs j
-              WHERE j.id = schedule_events.job_id AND j.assigned_to_user_id = ${userId}
+              WHERE j.id = schedule_events.job_id AND j.assigned_to_user_id ${uuidInList(userIds)}
             )
           )
-          -- Claim-linked work where the user is a claim assignee
+          -- Claim-linked work where a selected user is a claim assignee
           OR (
             claim_id IS NOT NULL
             AND event_type IN (
@@ -96,16 +114,14 @@ export class ScheduleService {
             )
             AND EXISTS (
               SELECT 1 FROM claim_assignees ca
-              WHERE ca.claim_id = schedule_events.claim_id AND ca.user_id = ${userId}
+              WHERE ca.claim_id = schedule_events.claim_id AND ca.user_id ${uuidInList(userIds)}
             )
           )
-        )`
-      : sql``;
-
-    if (userId) {
-      this.logger.debug(
-        `ScheduleService.findEvents — mine filter userId=${userId} from=${params.from} to=${params.to}`,
-      );
+        )`;
+        this.logger.debug(
+          `ScheduleService.findEvents — assignee filter userIds=${userIds.join(',')} from=${params.from} to=${params.to}`,
+        );
+      }
     }
 
     const result = await this.db.execute<ScheduleEventRow>(sql`

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Eye,
   FileText,
@@ -11,28 +11,95 @@ import {
   File,
   Loader2,
   Paperclip,
+  Search,
+  X,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   attachDocumentToEntityAction,
   fetchEntityAttachmentsAction,
 } from '@/app/(app)/attachments/actions';
 import { formatDate, formatBytes, PhaseUnavailable } from '@/components/shared/detail';
+import {
+  compareDates,
+  compareValues,
+  commitColumnFilterSelection,
+  SortableColumnHeader,
+  TableEmptyRow,
+  ValueFilterMenu,
+} from '@/components/shared/list-filters';
 import { ProjectDocumentsPickerDrawer } from '@/components/documents/ProjectDocumentsPickerDrawer';
 import { cn } from '@/lib/utils';
 import type { Attachment } from '@/types/api';
+
+type SyncTab = 'all' | 'pending' | 'synced';
+
+type AttachmentSortField = 'name' | 'type' | 'size' | 'status' | 'created_at';
+
+interface ColDef {
+  key: AttachmentSortField;
+  label: string;
+}
+
+const TABLE_COLUMNS: ColDef[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'type', label: 'Type' },
+  { key: 'size', label: 'Size' },
+  { key: 'status', label: 'Status' },
+  { key: 'created_at', label: 'Uploaded' },
+];
 
 interface EntityAttachmentsTabProps {
   entityId: string;
   relatedRecordType: 'Job' | 'Quote' | 'Invoice' | string;
   jobId?: string | null;
   entityLabel?: string;
+  /** Controlled documents-picker open state (optional). */
+  pickerOpen?: boolean;
+  onPickerOpenChange?: (open: boolean) => void;
+  /** When true, omit the in-tab attach control (parent header owns it). */
+  hideAttachButton?: boolean;
 }
 
 function attachmentFileName(a: Attachment): string {
   return a.fileName ?? a.filename ?? a.title ?? a.id;
+}
+
+function attachmentTypeLabel(a: Attachment): string {
+  const docType = a.documentType?.trim();
+  if (docType) return docType;
+  const metaType = a.attachmentMeta?.documentTypeExternalReference;
+  if (typeof metaType === 'string' && metaType.trim()) return metaType.trim();
+  const mime = a.mimeType?.trim();
+  if (!mime) return 'Unknown';
+  if (mime.startsWith('image/')) return 'Image';
+  if (mime.startsWith('video/')) return 'Video';
+  if (mime.startsWith('audio/')) return 'Audio';
+  if (mime.includes('pdf')) return 'PDF';
+  if (mime.includes('spreadsheet') || mime.includes('excel') || mime === 'text/csv') {
+    return 'Spreadsheet';
+  }
+  if (mime.includes('word')) return 'Word';
+  return mime;
+}
+
+function attachmentSize(a: Attachment): number | null {
+  if (typeof a.fileSize === 'string') {
+    const n = Number(a.fileSize);
+    return Number.isFinite(n) ? n : null;
+  }
+  return a.fileSize ?? null;
+}
+
+function isPendingSync(a: Attachment): boolean {
+  return a.attachmentMeta?.pendingCrunchworkSync === true;
+}
+
+function syncStatusLabel(a: Attachment): string {
+  return isPendingSync(a) ? 'Pending sync' : 'Synced';
 }
 
 function getFileIcon(mimeType?: string | null) {
@@ -60,69 +127,21 @@ function getFileIconColor(mimeType?: string | null): string {
   return 'text-slate-500';
 }
 
-function AttachmentCard({ attachment }: { attachment: Attachment }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
-  const Icon = getFileIcon(attachment.mimeType);
-  const iconColor = getFileIconColor(attachment.mimeType);
-  const name = attachmentFileName(attachment);
-  const pendingSync = attachment.attachmentMeta?.pendingCrunchworkSync === true;
-  const thumbSrc = attachment.sourceDocumentId
-    ? `/api/documents/${attachment.sourceDocumentId}/thumbnail`
-    : null;
-  const viewHref = `/api/attachments/${attachment.id}/download?disposition=inline`;
-  const size =
-    typeof attachment.fileSize === 'string'
-      ? Number(attachment.fileSize)
-      : (attachment.fileSize ?? null);
-
-  return (
-    <Card className="group relative flex flex-col overflow-hidden p-0 gap-0 transition-all hover:shadow-md">
-      {pendingSync && (
-        <Badge
-          variant="secondary"
-          className="absolute left-2 top-2 z-10 text-[10px]"
-          title="Saved locally; will upload to Crunchwork when this record is synced"
-        >
-          Pending sync
-        </Badge>
-      )}
-      <div className="relative aspect-[210/297] w-full overflow-hidden bg-slate-100">
-        {thumbSrc && !thumbFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbSrc}
-            alt={name}
-            className="absolute inset-0 h-full w-full object-contain"
-            onError={() => setThumbFailed(true)}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-400">
-            <Icon className={cn('h-10 w-10', iconColor)} />
-          </div>
-        )}
-      </div>
-      <div className="flex flex-col gap-1 p-3">
-        <p className="truncate text-sm font-medium text-slate-900" title={name}>
-          {name}
-        </p>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-slate-500">{formatBytes(size)}</span>
-          <a
-            href={viewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            <Eye className="h-3 w-3" />
-            View
-          </a>
-        </div>
-        {attachment.createdAt && (
-          <p className="text-[11px] text-muted-foreground">{formatDate(attachment.createdAt)}</p>
-        )}
-      </div>
-    </Card>
-  );
+function getSortValue(a: Attachment, field: AttachmentSortField): string | number | null | undefined {
+  switch (field) {
+    case 'name':
+      return attachmentFileName(a);
+    case 'type':
+      return attachmentTypeLabel(a);
+    case 'size':
+      return attachmentSize(a);
+    case 'status':
+      return syncStatusLabel(a);
+    case 'created_at':
+      return a.createdAt;
+    default:
+      return null;
+  }
 }
 
 export function EntityAttachmentsTab({
@@ -130,12 +149,30 @@ export function EntityAttachmentsTab({
   relatedRecordType,
   jobId,
   entityLabel,
+  pickerOpen: pickerOpenProp,
+  onPickerOpenChange,
+  hideAttachButton = false,
 }: EntityAttachmentsTabProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [phaseUnavailable, setPhaseUnavailable] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [internalPickerOpen, setInternalPickerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [syncTab, setSyncTab] = useState<SyncTab>('all');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [columnSort, setColumnSort] = useState<{
+    field: AttachmentSortField;
+    order: 'asc' | 'desc';
+  }>({ field: 'created_at', order: 'desc' });
+
+  const pickerOpen = pickerOpenProp ?? internalPickerOpen;
+  const setPickerOpen = onPickerOpenChange ?? setInternalPickerOpen;
 
   const load = useCallback(async () => {
     const res = await fetchEntityAttachmentsAction(relatedRecordType, entityId);
@@ -155,8 +192,114 @@ export function EntityAttachmentsTab({
     };
   }, [load]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const canAttach = Boolean(jobId);
   const label = entityLabel ?? 'this record';
+
+  const uniqueTypes = useMemo(() => {
+    const names = new Set<string>();
+    for (const a of attachments) {
+      names.add(attachmentTypeLabel(a));
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [attachments]);
+
+  const uniqueStatuses = useMemo(() => ['Pending sync', 'Synced'], []);
+
+  const toggleType = (name: string) => {
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const handleColumnSort = (field: AttachmentSortField) => {
+    setColumnSort((prev) => {
+      if (prev.field === field) return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
+      return { field, order: field === 'name' || field === 'type' ? 'asc' : 'desc' };
+    });
+  };
+
+  const visibleRows = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    let rows = attachments.filter((a) => {
+      if (syncTab === 'pending' && !isPendingSync(a)) return false;
+      if (syncTab === 'synced' && isPendingSync(a)) return false;
+
+      if (typeFilterActive && !typeFilter.has(attachmentTypeLabel(a))) return false;
+      if (statusFilterActive && !statusFilter.has(syncStatusLabel(a))) return false;
+
+      if (!q) return true;
+      const haystack = [
+        attachmentFileName(a),
+        a.title,
+        a.documentType,
+        a.mimeType,
+        a.uploadedByName,
+        syncStatusLabel(a),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+
+    const isDate = columnSort.field === 'created_at';
+    const isNumeric = columnSort.field === 'size';
+    rows = [...rows].sort((a, b) => {
+      const aVal = getSortValue(a, columnSort.field);
+      const bVal = getSortValue(b, columnSort.field);
+      if (isDate) return compareDates(String(aVal ?? ''), String(bVal ?? ''), columnSort.order);
+      if (isNumeric) {
+        const an = typeof aVal === 'number' ? aVal : Number(aVal ?? NaN);
+        const bn = typeof bVal === 'number' ? bVal : Number(bVal ?? NaN);
+        const aMissing = !Number.isFinite(an);
+        const bMissing = !Number.isFinite(bn);
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        return columnSort.order === 'asc' ? an - bn : bn - an;
+      }
+      return compareValues(String(aVal ?? ''), String(bVal ?? ''), columnSort.order);
+    });
+    return rows;
+  }, [
+    attachments,
+    syncTab,
+    debouncedSearch,
+    typeFilter,
+    typeFilterActive,
+    statusFilter,
+    statusFilterActive,
+    columnSort,
+  ]);
 
   async function handleAttach(params: {
     documentIds: string[];
@@ -199,54 +342,196 @@ export function EntityAttachmentsTab({
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Paperclip className="h-4 w-4 text-muted-foreground" />
-            Attachments ({attachments.length})
-            {refreshing && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-          </CardTitle>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canAttach}
-            title={
-              canAttach
-                ? 'Attach a document from the project repository'
-                : 'Link a job to attach documents from the project repository'
-            }
-            onClick={() => {
-              setPickerOpen(true);
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <Tabs value={syncTab} onValueChange={(val) => setSyncTab(val as SyncTab)}>
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="pending">Pending sync</TabsTrigger>
+              <TabsTrigger value="synced">Synced</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Input
+              placeholder="Search attachments..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 w-full pl-9 pr-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <ValueFilterMenu
+            options={uniqueTypes}
+            selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
+            onToggle={toggleType}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
             }}
-          >
-            <Paperclip className="mr-1 h-3 w-3" />
-            Attach Item
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {!canAttach && (
-            <p className="mb-3 text-xs text-muted-foreground">
-              Attach Item requires a linked job so documents can be selected from the project
-              repository.
-            </p>
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+            }}
+            emptyLabel="All types"
+            menuTitle="Filter by type"
+            itemNoun={{ singular: 'type', plural: 'types' }}
+          />
+
+          {!hideAttachButton && (
+            <Button
+              size="default"
+              variant="outline"
+              disabled={!canAttach}
+              className="h-10 gap-1.5"
+              title={
+                canAttach
+                  ? 'Attach files from the project documents browser for upload to Crunchwork'
+                  : 'Link a job to attach documents from the project repository'
+              }
+              onClick={() => setPickerOpen(true)}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              Attach from Documents
+              {refreshing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            </Button>
           )}
-          {attachments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/10 py-10">
-              <Paperclip className="mb-2 h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No attachments linked to {label}.</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                Use Attach Item to select files from the project documents repository.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {attachments.map((a) => (
-                <AttachmentCard key={a.id} attachment={a} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {!canAttach && (
+          <p className="text-xs text-muted-foreground">
+            Attach from Documents requires a linked job so files can be selected from the project
+            repository and uploaded to Crunchwork.
+          </p>
+        )}
+
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                {TABLE_COLUMNS.map((col) => (
+                  <SortableColumnHeader
+                    key={col.key}
+                    columnKey={col.key}
+                    label={col.label}
+                    activeField={columnSort.field}
+                    sortOrder={columnSort.order}
+                    onSort={handleColumnSort}
+                    filter={
+                      col.key === 'type'
+                        ? {
+                            options: uniqueTypes,
+                            selected: typeFilter,
+                            active: typeFilterActive,
+                            onApply: applyTypeFilter,
+                            menuTitle: 'Filter by type',
+                            itemNoun: { singular: 'type', plural: 'types' },
+                          }
+                        : col.key === 'status'
+                          ? {
+                              options: uniqueStatuses,
+                              selected: statusFilter,
+                              active: statusFilterActive,
+                              onApply: applyStatusFilter,
+                              menuTitle: 'Filter by status',
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                            }
+                          : undefined
+                    }
+                  />
+                ))}
+                <th scope="col" className="px-4 py-3 text-right">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow
+                  colSpan={TABLE_COLUMNS.length + 1}
+                  label={
+                    attachments.length === 0
+                      ? `No attachments linked to ${label}.`
+                      : 'No attachments match your filters.'
+                  }
+                />
+              ) : (
+                visibleRows.map((a) => {
+                  const name = attachmentFileName(a);
+                  const Icon = getFileIcon(a.mimeType);
+                  const iconColor = getFileIconColor(a.mimeType);
+                  const pending = isPendingSync(a);
+                  const size = attachmentSize(a);
+                  const viewHref = `/api/attachments/${a.id}/download?disposition=inline`;
+                  return (
+                    <tr key={a.id} className="transition-colors hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Icon className={cn('h-4 w-4 shrink-0', iconColor)} />
+                          <span className="truncate font-medium text-slate-900" title={name}>
+                            {name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{attachmentTypeLabel(a)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatBytes(size)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {pending ? (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px]"
+                            title="Saved locally; will upload to Crunchwork when this record is synced"
+                          >
+                            Pending sync
+                          </Badge>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Synced
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(a.createdAt)}
+                        {a.uploadedByName ? ` by ${a.uploadedByName}` : ''}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <a
+                          href={viewHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <Eye className="h-3 w-3" />
+                          View
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {attachments.length === 0 && canAttach && (
+          <p className="text-center text-xs text-muted-foreground">
+            Use Attach from Documents to select files from the project repository for upload to
+            Crunchwork.
+          </p>
+        )}
+      </div>
 
       {jobId && (
         <ProjectDocumentsPickerDrawer

@@ -298,7 +298,7 @@ export function FeedbackDetailDrawer({
                 Close Item
               </Button>
             )}
-            {item.status === 'closed' && (
+            {(item.status === 'resolved' || item.status === 'closed') && (
               <Button
                 type="button"
                 variant="outline"

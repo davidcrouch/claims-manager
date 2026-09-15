@@ -47,11 +47,15 @@ function toJobContactRef(contact: ExistingJobContact, index: number): JobContact
   };
 }
 
+function contactDisplayName(contact: JobContactRef): string {
+  return [contact.firstName, contact.lastName].filter(Boolean).join(' ');
+}
+
 export interface AddJobContactsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobId: string;
-  /** Contacts already linked to the job — shown when the drawer opens. */
+  /** Contacts already linked to the job — shown in a read-only panel. */
   existingContacts?: ExistingJobContact[];
   aiAssistEnabled?: boolean;
 }
@@ -64,46 +68,38 @@ export function AddJobContactsDrawer({
   aiAssistEnabled,
 }: AddJobContactsDrawerProps) {
   const router = useRouter();
-  const [contacts, setContacts] = useState<JobContactRef[]>([]);
-  const [lockedKeys, setLockedKeys] = useState<ReadonlySet<string>>(new Set());
-  const [initialContactIds, setInitialContactIds] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
+  const [newContacts, setNewContacts] = useState<JobContactRef[]>([]);
+  const [linkedContacts, setLinkedContacts] = useState<JobContactRef[]>([]);
+  const [excludeIds, setExcludeIds] = useState<string[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
-      setContacts([]);
-      setLockedKeys(new Set());
-      setInitialContactIds(new Set());
+      setNewContacts([]);
+      setLinkedContacts([]);
+      setExcludeIds([]);
       setContactDrawerOpen(false);
       setSubmitting(false);
       setError(null);
       return;
     }
 
-    // Seed once when the drawer opens so parent re-renders don't reset staged adds.
-    const seeded = existingContacts.map(toJobContactRef);
-    setContacts(seeded);
-    setLockedKeys(new Set(seeded.map((c) => c.key)));
-    setInitialContactIds(
-      new Set(
-        seeded
-          .map((c) => c.contactId)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0),
-      ),
+    // Capture existing contacts once on open so parent re-renders don't reset staged adds.
+    const linked = existingContacts.map(toJobContactRef);
+    setLinkedContacts(linked);
+    setExcludeIds(
+      linked
+        .map((c) => c.contactId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
     );
+    setNewContacts([]);
     setContactDrawerOpen(false);
     setSubmitting(false);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- capture existingContacts at open time
   }, [open]);
-
-  const newlyAdded = contacts.filter(
-    (c) => !c.contactId || !initialContactIds.has(c.contactId),
-  );
 
   function handleOpenChange(next: boolean) {
     // Keep this drawer open while the nested contact drawer is visible
@@ -113,11 +109,11 @@ export function AddJobContactsDrawer({
   }
 
   function addContact(contact: JobContactRef) {
-    setContacts((prev) => {
-      if (contact.contactId && prev.some((c) => c.contactId === contact.contactId)) {
-        return prev;
+    setNewContacts((prev) => {
+      if (contact.contactId) {
+        if (excludeIds.includes(contact.contactId)) return prev;
+        if (prev.some((c) => c.contactId === contact.contactId)) return prev;
       }
-      // Newly selected/created contacts appear at the top of the list.
       return [contact, ...prev];
     });
     setError(null);
@@ -128,12 +124,11 @@ export function AddJobContactsDrawer({
   }
 
   function removeContact(key: string) {
-    if (lockedKeys.has(key)) return;
-    setContacts((prev) => prev.filter((c) => c.key !== key));
+    setNewContacts((prev) => prev.filter((c) => c.key !== key));
   }
 
   async function handleSubmit() {
-    if (newlyAdded.length === 0) {
+    if (newContacts.length === 0) {
       setError('Add at least one new contact, or cancel.');
       return;
     }
@@ -143,7 +138,7 @@ export function AddJobContactsDrawer({
     try {
       const result = await addJobContactsAction(
         jobId,
-        newlyAdded.map((c) =>
+        newContacts.map((c) =>
           c.contactId
             ? { contactId: c.contactId }
             : {
@@ -178,15 +173,44 @@ export function AddJobContactsDrawer({
         aiAssistEnabled={aiAssistEnabled}
       >
         <BottomFormDrawerBody>
-          <JobContactsPicker
-            contacts={contacts}
-            onAdd={addContact}
-            onRemove={removeContact}
-            onNewContact={() => setContactDrawerOpen(true)}
-            lockedKeys={lockedKeys}
-            description="Search existing contacts or add a new one."
-            newContactLabel="Create New Contact"
-          />
+          <div className="space-y-6">
+            <JobContactsPicker
+              contacts={newContacts}
+              onAdd={addContact}
+              onRemove={removeContact}
+              onNewContact={() => setContactDrawerOpen(true)}
+              excludeIds={excludeIds}
+              description="Search existing contacts or add a new one."
+              newContactLabel="Create New Contact"
+              contactsListClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              contactItemClassName="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm"
+            />
+
+            {linkedContacts.length > 0 && (
+              <div className="space-y-2 pt-10">
+                <h3 className="text-sm font-medium">Existing Contacts</h3>
+                <p className="text-sm text-muted-foreground">
+                  Already linked to this job. They will not be added again.
+                </p>
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {linkedContacts.map((c) => (
+                    <li
+                      key={c.key}
+                      className="rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                    >
+                      <div className="font-medium">{contactDisplayName(c)}</div>
+                      {(c.email || c.mobilePhone) && (
+                        <div className="mt-0.5 flex flex-col gap-0.5 break-all text-muted-foreground">
+                          {c.email && <span>{c.email}</span>}
+                          {c.mobilePhone && <span>{c.mobilePhone}</span>}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <BottomFormDrawerError error={error} />
         </BottomFormDrawerBody>
 
@@ -202,7 +226,7 @@ export function AddJobContactsDrawer({
           <Button
             type="button"
             size="lg"
-            disabled={submitting || newlyAdded.length === 0}
+            disabled={submitting || newContacts.length === 0}
             onClick={handleSubmit}
           >
             {submitting ? 'Adding...' : 'Add contacts'}

@@ -933,7 +933,7 @@ export function JobsListClient({
         className={`flex-1 pb-6 ${isPicker ? 'px-4' : 'px-6'}`}
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">

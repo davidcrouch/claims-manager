@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, ExternalLink, MapPin } from 'lucide-react';
+import { BookOpen, ExternalLink, Lock, MapPin } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/components/layout/PageHeaderLayout';
 import { formatAddress, formatDate, formatDateTime } from '@/components/shared/detail';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { isJournalLocked } from './journal-lock';
 import type { Job, Journal } from '@/types/api';
 
 function addressLine(journal: Journal): string {
@@ -41,6 +42,7 @@ export function JournalPageHeader({
   const visitDate =
     typeof journal.metadata?.visitDate === 'string' ? journal.metadata.visitDate : null;
   const backHref = job ? `/journals?jobId=${job.id}` : '/journals';
+  const locked = isJournalLocked(journal.status);
 
   return (
     <PageHeaderLayout
@@ -57,6 +59,12 @@ export function JournalPageHeader({
       topRow={
         <>
           <StatusBadge status={journal.status} />
+          {locked && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
           {address && (
             <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />

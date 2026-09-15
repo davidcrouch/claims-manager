@@ -1205,6 +1205,7 @@ export interface JournalPage {
   sortIndex: number;
   metadata: Record<string, unknown> & {
     name?: string;
+    description?: string;
     blocks?: JournalPageBlock[];
   };
   createdByUserId: string | null;

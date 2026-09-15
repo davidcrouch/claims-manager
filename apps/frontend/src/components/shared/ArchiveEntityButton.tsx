@@ -89,11 +89,11 @@ export function ArchiveEntityButton({
   return (
     <>
       <Button
-        size="lg"
+        size="icon-lg"
         onClick={() => setOpen(true)}
         disabled={isPending}
         className={cn(
-          'gap-1.5 bg-red-600 text-white hover:bg-red-500 hover:text-white',
+          'bg-red-600 text-white hover:bg-red-500 hover:text-white',
           className,
         )}
         title={`Archive ${noun}`}
@@ -104,7 +104,6 @@ export function ArchiveEntityButton({
         ) : (
           <Trash2 className="h-4 w-4" />
         )}
-        Archive
       </Button>
 
       <Dialog

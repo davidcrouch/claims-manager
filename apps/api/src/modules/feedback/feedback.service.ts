@@ -141,7 +141,10 @@ export class FeedbackService {
     type?: string;
     status?: string;
     priority?: string;
+    reportedBy?: string;
+    pageLabel?: string;
     search?: string;
+    sort?: string;
     page?: number;
     limit?: number;
     actor?: FeedbackActor;
@@ -152,6 +155,61 @@ export class FeedbackService {
     return {
       data: await this.attachNotes({ rows: result.data, tenantId, actorIds }),
       total: result.total,
+    };
+  }
+
+  async findFilterOptions(): Promise<{
+    reporters: { id: string; name: string }[];
+    pages: string[];
+  }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const options = await this.feedbackRepo.findFilterOptions({ tenantId });
+    const byId = new Map<string, { name: string | null; email: string | null }>();
+    await Promise.all(
+      [...new Set(options.reporters.map((r) => r.userId))].map(async (id) => {
+        const user = await this.usersRepo.findById({ id });
+        if (user) byId.set(id, { name: user.name, email: user.email });
+      }),
+    );
+    const reporters = options.reporters.map((row) => {
+      const user = byId.get(row.userId);
+      let name: string;
+      if (user) {
+        name = formatReporterLabel({
+          name: user.name,
+          email: user.email,
+          fallbackId: row.userId,
+        });
+      } else if (row.name?.trim() && !looksLikeRawId(row.name)) {
+        name = stripTrailingEmail(row.name);
+      } else if (row.userId?.trim() && !looksLikeRawId(row.userId)) {
+        name = row.userId.trim();
+      } else {
+        name = 'Unknown user';
+      }
+      if (looksLikeRawId(name)) name = 'Unknown user';
+      return { id: row.userId, name };
+    });
+    const unique = new Map<string, { id: string; name: string }>();
+    for (const reporter of reporters) {
+      if (!unique.has(reporter.id)) unique.set(reporter.id, reporter);
+    }
+    const named = [...unique.values()];
+    const nameCounts = new Map<string, number>();
+    for (const reporter of named) {
+      nameCounts.set(reporter.name, (nameCounts.get(reporter.name) ?? 0) + 1);
+    }
+    return {
+      reporters: named
+        .map((reporter) => ({
+          ...reporter,
+          name:
+            (nameCounts.get(reporter.name) ?? 0) > 1
+              ? `${reporter.name} (${reporter.id.slice(0, 8)})`
+              : reporter.name,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      pages: options.pages,
     };
   }
 

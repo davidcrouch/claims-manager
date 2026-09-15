@@ -30,7 +30,10 @@ export class FeedbackController {
     @Query('type') type?: string,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
+    @Query('reportedBy') reportedBy?: string,
+    @Query('pageLabel') pageLabel?: string,
     @Query('search') search?: string,
+    @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -38,7 +41,10 @@ export class FeedbackController {
       type,
       status,
       priority,
+      reportedBy,
+      pageLabel,
       search,
+      sort,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       actor: { userId: user.sub, email: user.email },
@@ -49,6 +55,12 @@ export class FeedbackController {
   @RequirePermission(P.feedback.read)
   async getStats() {
     return this.feedbackService.getStats();
+  }
+
+  @Get('filter-options')
+  @RequirePermission(P.feedback.read)
+  async getFilterOptions() {
+    return this.feedbackService.findFilterOptions();
   }
 
   @Get(':id')

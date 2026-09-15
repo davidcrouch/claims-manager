@@ -5,9 +5,7 @@ import { flushSync } from 'react-dom';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Calendar,
-  Clock,
   Users,
-  FileBarChart,
   Info,
   Paperclip,
   Plus,
@@ -30,8 +28,6 @@ import type { AddressParts } from '@/components/shared/AddressAutocompleteInput'
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab, type JobTypeDetailsSnapshot, type JobTypeDetailsTabHandle } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
-import { JobReportsTab } from './tabs/JobReportsTab';
-import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { JobCreateMakeSafeDrawer } from './JobCreateMakeSafeDrawer';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
@@ -56,9 +52,7 @@ const VALID_TABS = [
   'overview',
   'type-details',
   'parties',
-  'reports',
   'attachments',
-  'timeline',
 ] as const;
 
 type TabValue = (typeof VALID_TABS)[number];
@@ -228,8 +222,6 @@ export function JobDetail({
   statusOptions = [],
   jobTypeOptions = [],
   contactTypeOptions = [],
-  reportStatusOptions = [],
-  reportTypeOptions = [],
   assessments = [],
   makeSafeJobType,
   existingMakeSafeJobId = null,
@@ -239,8 +231,6 @@ export function JobDetail({
   statusOptions?: LookupOption[];
   jobTypeOptions?: LookupOption[];
   contactTypeOptions?: LookupOption[];
-  reportStatusOptions?: LookupOption[];
-  reportTypeOptions?: LookupOption[];
   assessments?: Assessment[];
   /** Builder Make Safe lookup used by Create Make-Safe. */
   makeSafeJobType?: LookupOption | null;
@@ -263,7 +253,7 @@ export function JobDetail({
   const [fieldEditTick, setFieldEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<JobFieldsSnapshot[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
-  const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
+  const [attachmentsPickerOpen, setAttachmentsPickerOpen] = useState(false);
   const [estimateDrawerOpen, setEstimateDrawerOpen] = useState(false);
   const [appointmentDrawerOpen, setAppointmentDrawerOpen] = useState(false);
   const [appointmentCreateDefaults, setAppointmentCreateDefaults] =
@@ -323,7 +313,7 @@ export function JobDetail({
 
   useEffect(() => {
     if (activeTab !== 'parties') setContactDrawerOpen(false);
-    if (activeTab !== 'reports') setReportDrawerOpen(false);
+    if (activeTab !== 'attachments') setAttachmentsPickerOpen(false);
   }, [activeTab]);
 
   const onTabChange = useCallback(
@@ -517,9 +507,7 @@ export function JobDetail({
       ? [{ id: 'type-details' as TabValue, label: 'Type Details', icon: Info }]
       : []),
     { id: 'parties', label: 'Parties', icon: Users },
-    { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
-    { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
 
   const jobReportTypes = useMemo(
@@ -561,16 +549,17 @@ export function JobDetail({
         Add Contact
       </Button>
     );
-  } else if (activeTab === 'reports') {
+  } else if (activeTab === 'attachments') {
     tabActions = (
       <Button
         size="default"
         variant="outline"
-        onClick={() => setReportDrawerOpen(true)}
+        onClick={() => setAttachmentsPickerOpen(true)}
         className="h-9 gap-1.5 px-4"
+        title="Open the project documents browser to attach files for upload to Crunchwork"
       >
-        <FileBarChart className="h-3.5 w-3.5" />
-        Report Creation Unavailable
+        <Paperclip className="h-3.5 w-3.5" />
+        Attach from Documents
       </Button>
     );
   }
@@ -703,25 +692,17 @@ export function JobDetail({
         {activeTab === 'parties' && (
           <JobPartiesTab job={job} typeOptions={contactTypeOptions} />
         )}
-        {activeTab === 'reports' && (
-          <JobReportsTab
-            jobId={job.id}
-            claimId={claimId}
-            drawerOpen={reportDrawerOpen}
-            onDrawerOpenChange={setReportDrawerOpen}
-            statusOptions={reportStatusOptions}
-            reportTypes={reportTypeOptions}
-          />
-        )}
         {activeTab === 'attachments' && (
           <EntityAttachmentsTab
             entityId={job.id}
             relatedRecordType="Job"
             jobId={job.id}
             entityLabel="this job"
+            pickerOpen={attachmentsPickerOpen}
+            onPickerOpenChange={setAttachmentsPickerOpen}
+            hideAttachButton
           />
         )}
-        {activeTab === 'timeline' && <JobTimelineTab job={job} />}
       </div>
 
       <AddJobContactsDrawer

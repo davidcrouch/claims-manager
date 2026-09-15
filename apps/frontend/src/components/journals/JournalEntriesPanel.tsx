@@ -14,16 +14,19 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { ApiClient } from '@/lib/api-client';
 import type { JournalPage, JournalPageAttachment } from '@/types/api';
 import { DocumentProcessingStatus } from '@/components/documents/DocumentProcessingStatus';
 import { useDocumentPipelineProgress } from '@/hooks/useDocumentPipelineProgress';
+import { JournalEntryEditor } from './JournalEntryEditor';
 import {
   attachmentDocumentId,
   attachmentThumbSrc,
   countNoteBlocks,
   countUploadBlocks,
+  pageEntryDescription,
+  pageEntryName,
   resolvePageBlocks,
-  type ResolvedNoteBlock,
   type ResolvedUploadBlock,
 } from './page-blocks';
 
@@ -32,6 +35,10 @@ export interface JournalEntriesPanelProps {
   selectedPageId: string | null;
   onSelectPage: (pageId: string) => void;
   onAddEntry?: () => void;
+  journalId?: string;
+  api?: ApiClient | null;
+  onPageUpdated?: (page: JournalPage) => void;
+  locked?: boolean;
 }
 
 function formatTime(dateStr: string) {
@@ -50,13 +57,24 @@ function formatDate(dateStr: string) {
   });
 }
 
+function truncateLabel(text: string, max = 48): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
 function entryTitle(page: JournalPage): string {
+  const name = pageEntryName(page).trim();
+  if (name) return truncateLabel(name);
+
+  const description = pageEntryDescription(page).trim();
+  if (description) return truncateLabel(description.split('\n')[0] ?? description);
+
   const firstNote = resolvePageBlocks(page).find(
     (b) => b.type === 'note' && b.text.trim(),
   );
   if (firstNote && firstNote.type === 'note') {
-    const firstLine = firstNote.text.trim().split('\n')[0];
-    return firstLine.length > 48 ? `${firstLine.slice(0, 48)}…` : firstLine;
+    return truncateLabel(firstNote.text.split('\n')[0] ?? firstNote.text);
   }
   const firstUpload = resolvePageBlocks(page).find((b) => b.type === 'upload');
   if (firstUpload && firstUpload.type === 'upload' && firstUpload.attachment) {
@@ -69,6 +87,7 @@ function contentSummary(page: JournalPage): string {
   const notes = countNoteBlocks(page);
   const uploads = countUploadBlocks(page);
   const parts: string[] = [];
+  if (pageEntryDescription(page).trim()) parts.push('description');
   if (notes > 0) parts.push(`${notes} note${notes === 1 ? '' : 's'}`);
   if (uploads > 0) parts.push(`${uploads} upload${uploads === 1 ? '' : 's'}`);
   return parts.length > 0 ? parts.join(' · ') : 'Empty';
@@ -83,33 +102,6 @@ function fileIcon(mimeType: string) {
   if (mimeType.includes('pdf') || mimeType.includes('word') || mimeType === 'text/plain')
     return FileText;
   return File;
-}
-
-function groupEntryBlocks(
-  blocks: ReturnType<typeof resolvePageBlocks>,
-): Array<
-  | { kind: 'note'; block: ResolvedNoteBlock }
-  | { kind: 'uploads'; blocks: ResolvedUploadBlock[] }
-> {
-  const groups: Array<
-    | { kind: 'note'; block: ResolvedNoteBlock }
-    | { kind: 'uploads'; blocks: ResolvedUploadBlock[] }
-  > = [];
-
-  for (const block of blocks) {
-    if (block.type === 'note') {
-      groups.push({ kind: 'note', block });
-      continue;
-    }
-    const last = groups[groups.length - 1];
-    if (last?.kind === 'uploads') {
-      last.blocks.push(block);
-    } else {
-      groups.push({ kind: 'uploads', blocks: [block] });
-    }
-  }
-
-  return groups;
 }
 
 function UploadThumbnail({
@@ -176,7 +168,7 @@ function UploadThumbnail({
   );
 }
 
-function EntryContent({
+function EntryUploads({
   page,
   onExpand,
 }: {
@@ -200,14 +192,14 @@ function EntryContent({
     pipeline.phase === 'running' ||
     pipeline.phase === 'failed';
 
-  const blocks = resolvePageBlocks(page);
-  const groups = groupEntryBlocks(blocks);
+  const uploads = resolvePageBlocks(page).filter(
+    (b): b is ResolvedUploadBlock => b.type === 'upload',
+  );
 
-  if (groups.length === 0) {
+  if (!showPipeline && uploads.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
-        <FileText className="size-8 opacity-40" />
-        <p className="text-sm">No notes or uploads in this entry</p>
+      <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+        No uploads in this entry
       </div>
     );
   }
@@ -217,31 +209,22 @@ function EntryContent({
       {showPipeline ? (
         <DocumentProcessingStatus progress={pipeline} title="Document processing" />
       ) : null}
-      {groups.map((group) =>
-        group.kind === 'note' ? (
-          <div key={group.block.id} className="rounded-md border bg-muted/20 px-3 py-2.5">
-            <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Note
-            </p>
-            <p className="whitespace-pre-wrap text-sm">{group.block.text}</p>
+      {uploads.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {uploads.length === 1 ? 'Upload' : 'Uploads'}
+          </p>
+          <div className="flex flex-row flex-wrap gap-2">
+            {uploads.map((block) => (
+              <UploadThumbnail
+                key={block.id}
+                attachment={block.attachment}
+                onExpand={onExpand}
+              />
+            ))}
           </div>
-        ) : (
-          <div key={group.blocks[0].id} className="space-y-1.5">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {group.blocks.length === 1 ? 'Upload' : 'Uploads'}
-            </p>
-            <div className="flex flex-row flex-wrap gap-2">
-              {group.blocks.map((block) => (
-                <UploadThumbnail
-                  key={block.id}
-                  attachment={block.attachment}
-                  onExpand={onExpand}
-                />
-              ))}
-            </div>
-          </div>
-        ),
-      )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -251,6 +234,10 @@ export function JournalEntriesPanel({
   selectedPageId,
   onSelectPage,
   onAddEntry,
+  journalId,
+  api,
+  onPageUpdated,
+  locked = false,
 }: JournalEntriesPanelProps) {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
@@ -276,7 +263,7 @@ export function JournalEntriesPanel({
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-16 text-center">
         <FileText className="size-8 text-muted-foreground/50" />
         <p className="text-sm text-muted-foreground">No entries yet</p>
-        {onAddEntry && (
+        {onAddEntry && !locked && (
           <Button size="sm" onClick={onAddEntry} className="gap-1.5">
             <Plus className="h-4 w-4" />
             Add Entry
@@ -333,30 +320,40 @@ export function JournalEntriesPanel({
         <section className="flex min-h-0 flex-col">
           {selectedPage ? (
             <>
-              <div className="space-y-2 border-b px-4 py-3">
-                <h3 className="text-sm font-semibold">{entryTitle(selectedPage)}</h3>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1" suppressHydrationWarning>
-                    <Clock className="size-3" />
-                    {formatDate(selectedPage.capturedAt)} {formatTime(selectedPage.capturedAt)}
-                  </span>
-                  {selectedPage.locationLabel && (
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="size-3" />
-                      {selectedPage.locationLabel}
-                    </span>
-                  )}
-                  {!selectedPage.locationLabel && selectedPage.latitude && (
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="size-3" />
-                      {Number(selectedPage.latitude).toFixed(4)},{' '}
-                      {Number(selectedPage.longitude).toFixed(4)}
-                    </span>
-                  )}
+              {journalId && api && onPageUpdated ? (
+                <JournalEntryEditor
+                  journalId={journalId}
+                  page={selectedPage}
+                  api={api}
+                  onPageUpdated={onPageUpdated}
+                  locked={locked}
+                />
+              ) : (
+                <div className="space-y-2 border-b px-4 py-3">
+                  <h3 className="text-sm font-semibold">{entryTitle(selectedPage)}</h3>
                 </div>
+              )}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1" suppressHydrationWarning>
+                  <Clock className="size-3" />
+                  {formatDate(selectedPage.capturedAt)} {formatTime(selectedPage.capturedAt)}
+                </span>
+                {selectedPage.locationLabel && (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="size-3" />
+                    {selectedPage.locationLabel}
+                  </span>
+                )}
+                {!selectedPage.locationLabel && selectedPage.latitude && (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="size-3" />
+                    {Number(selectedPage.latitude).toFixed(4)},{' '}
+                    {Number(selectedPage.longitude).toFixed(4)}
+                  </span>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto p-4">
-                <EntryContent page={selectedPage} onExpand={setExpandedImage} />
+                <EntryUploads page={selectedPage} onExpand={setExpandedImage} />
               </div>
             </>
           ) : (

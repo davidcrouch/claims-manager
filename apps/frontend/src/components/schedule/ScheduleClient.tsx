@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Calendar,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
+import {
+  ScheduleUserFilter,
+  type ScheduleUserFilterValue,
+} from '@/components/schedule/ScheduleUserFilter';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { fetchScheduleEventsAction } from '@/app/(app)/schedule/actions';
@@ -19,6 +23,35 @@ import {
   scheduleEventDrawerRequest,
 } from '@/components/schedule/schedule-event-href';
 import type { ScheduleEvent, ScheduleEventType, Job, Claim } from '@/types/api';
+
+/** Explicit "all users" in the URL so Back / refresh does not snap back to the logged-in user. */
+const SCHEDULE_ALL_USERS = 'all';
+/** Explicit empty selection — show no assignee-matched events. */
+const SCHEDULE_NO_USERS = '__none__';
+
+function parseScheduleUserFilter(params: {
+  searchParams: URLSearchParams;
+  currentUserId?: string | null;
+}): ScheduleUserFilterValue {
+  const multi = params.searchParams.get('assignedToUserIds');
+  const single = params.searchParams.get('assignedToUserId');
+  const raw = multi ?? single;
+  if (raw === SCHEDULE_ALL_USERS) return { mode: 'all' };
+  if (raw === SCHEDULE_NO_USERS) return { mode: 'none' };
+  if (raw) {
+    const ids = [...new Set(raw.split(',').map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) return { mode: 'none' };
+    return { mode: 'ids', ids };
+  }
+  if (params.currentUserId) return { mode: 'ids', ids: [params.currentUserId] };
+  return { mode: 'all' };
+}
+
+function scheduleUserFilterToParam(value: ScheduleUserFilterValue): string {
+  if (value.mode === 'all') return SCHEDULE_ALL_USERS;
+  if (value.mode === 'none') return SCHEDULE_NO_USERS;
+  return value.ids.join(',');
+}
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -269,19 +302,51 @@ function EventBar({
   );
 }
 
-export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; job?: Job | null; parentClaim?: Claim | null } = {}) {
+export function ScheduleClient({
+  jobId,
+  job,
+  parentClaim,
+  currentUserId,
+}: {
+  jobId?: string;
+  job?: Job | null;
+  parentClaim?: Claim | null;
+  currentUserId?: string | null;
+} = {}) {
   const { openEntityDrawer } = useEntityDrawer();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mineOnly, setMineOnly] = useState(false);
-  // TODO (081791e9): Add assignee/estimator filter — requires API support for
-  // `assigneeUserId` query param in fetchScheduleEventsAction, then a
-  // user-select dropdown here persisted in URL search params.
   const [enabledTypes, setEnabledTypes] = useState<Set<ScheduleEventType>>(
     () => new Set(DEFAULT_ENABLED_TYPES),
   );
+
+  /** Defaults to the logged-in user; `all` / `__none__` / CSV ids persisted in the URL. */
+  const userFilter = useMemo(
+    () => parseScheduleUserFilter({ searchParams, currentUserId }),
+    [searchParams, currentUserId],
+  );
+
+  const setUserFilter = useCallback(
+    (next: ScheduleUserFilterValue) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('assignedToUserId');
+      params.set('assignedToUserIds', scheduleUserFilterToParam(next));
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const assignedToUserIdsParam = useMemo(() => {
+    if (userFilter.mode === 'all') return undefined;
+    if (userFilter.mode === 'none') return SCHEDULE_NO_USERS;
+    return userFilter.ids.join(',');
+  }, [userFilter]);
 
   const { from, to } = useMemo(() => getDateRange(cursor, view), [cursor, view]);
 
@@ -292,14 +357,14 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
         from,
         to,
         jobId,
-        mine: mineOnly || undefined,
+        assignedToUserIds: assignedToUserIdsParam,
         limit: 1000,
       });
       setEvents(res.data);
     } finally {
       setLoading(false);
     }
-  }, [from, to, jobId, mineOnly]);
+  }, [from, to, jobId, assignedToUserIdsParam]);
 
   useEffect(() => {
     load();
@@ -385,30 +450,11 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
               Today
             </Button>
             <div className="ml-3 flex items-center gap-2 border-l border-slate-200 pl-3">
-              <button
-                type="button"
-                onClick={() => setMineOnly(false)}
-                className={`text-xs font-medium transition-colors ${
-                  mineOnly ? 'text-slate-400 hover:text-slate-600' : 'text-slate-700'
-                }`}
-              >
-                All
-              </button>
-              <Switch
-                id="schedule-scope"
-                checked={mineOnly}
-                onCheckedChange={setMineOnly}
-                aria-label="Show only my work"
+              <ScheduleUserFilter
+                value={userFilter}
+                onChange={setUserFilter}
+                className="w-[220px]"
               />
-              <button
-                type="button"
-                onClick={() => setMineOnly(true)}
-                className={`text-xs font-medium transition-colors ${
-                  mineOnly ? 'text-slate-700' : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                My Work
-              </button>
             </div>
             {loading && (
               <span className="ml-2 text-xs text-slate-400">Loading…</span>
