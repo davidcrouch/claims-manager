@@ -1322,8 +1322,8 @@
   Automated tests expect that two-step update sequence.
   Outcome: automated checks can proceed to image build and staging deploy.
 
-- `2026-09-15` `SHORT_SHA` **6 h**
-  `56 files | +2819 −768 | Tier 2 standard | Moderate orchestration`
+- `2026-09-15` `90cfc91` **6 h**
+  `57 files | +2830 −769 | Tier 2 standard | Moderate orchestration`
   Lay summary: Journals edit and save like other detail screens, the schedule can be filtered by person, feedback admin lists are easier to sort and filter, and attachments and claim details are clearer.
   Journals support inline edit with autosave, undo, and clearer lock handling for page content.
   Schedule can be filtered by assigned user so planners focus on one person’s day.
