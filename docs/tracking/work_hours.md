@@ -1332,7 +1332,7 @@
   Archive actions and list table scrolling are streamlined across major list screens.
   Documentation updated for the journal editing approach.
 
-- `2026-09-16` `88c03cd` **2 h**
+- `2026-09-16` `4e7aae4` **2 h**
   `21 files | +64 −50 | Tier 2 standard | Moderate orchestration`
   Lay summary: Schedule filtering by person works again, and column headers stay visible while scrolling long lists across the main work screens.
   **Schedule user filter fix and sticky list headers.**
