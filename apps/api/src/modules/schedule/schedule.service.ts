@@ -18,9 +18,13 @@ type ScheduleEventRow = {
   [key: string]: unknown;
 };
 
-function uuidInList(userIds: string[]) {
+/**
+ * Assignee columns on tasks/jobs/quotes/messages/claim_assignees/appointment_attendees
+ * are `text`, not `uuid`. Casting params to uuid causes `operator does not exist: text = uuid`.
+ */
+function textInList(userIds: string[]) {
   return sql`IN (${sql.join(
-    userIds.map((id) => sql`${id}::uuid`),
+    userIds.map((id) => sql`${id}`),
     sql`, `,
   )})`;
 }
@@ -71,27 +75,27 @@ export class ScheduleService {
           -- Direct assignees
           (event_type = 'task' AND EXISTS (
             SELECT 1 FROM tasks t
-            WHERE t.id = schedule_events.id AND t.assigned_to_user_id ${uuidInList(userIds)}
+            WHERE t.id = schedule_events.id AND t.assigned_to_user_id ${textInList(userIds)}
           ))
           OR (event_type = 'job' AND EXISTS (
             SELECT 1 FROM jobs j
-            WHERE j.id = schedule_events.id AND j.assigned_to_user_id ${uuidInList(userIds)}
+            WHERE j.id = schedule_events.id AND j.assigned_to_user_id ${textInList(userIds)}
           ))
           OR (event_type = 'quote' AND EXISTS (
             SELECT 1 FROM quotes q
-            WHERE q.id = schedule_events.id AND q.assigned_to_user_id ${uuidInList(userIds)}
+            WHERE q.id = schedule_events.id AND q.assigned_to_user_id ${textInList(userIds)}
           ))
           OR (event_type = 'message' AND EXISTS (
             SELECT 1 FROM messages m
-            WHERE m.id = schedule_events.id AND m.to_user_id ${uuidInList(userIds)}
+            WHERE m.id = schedule_events.id AND m.to_user_id ${textInList(userIds)}
           ))
           OR (event_type = 'claim' AND EXISTS (
             SELECT 1 FROM claim_assignees ca
-            WHERE ca.claim_id = schedule_events.id AND ca.user_id ${uuidInList(userIds)}
+            WHERE ca.claim_id = schedule_events.id AND ca.user_id ${textInList(userIds)}
           ))
           OR (event_type = 'appointment' AND EXISTS (
             SELECT 1 FROM appointment_attendees aa
-            WHERE aa.appointment_id = schedule_events.id AND aa.user_id ${uuidInList(userIds)}
+            WHERE aa.appointment_id = schedule_events.id AND aa.user_id ${textInList(userIds)}
           ))
           -- Job-linked work assigned to a selected user
           OR (
@@ -102,7 +106,7 @@ export class ScheduleService {
             )
             AND EXISTS (
               SELECT 1 FROM jobs j
-              WHERE j.id = schedule_events.job_id AND j.assigned_to_user_id ${uuidInList(userIds)}
+              WHERE j.id = schedule_events.job_id AND j.assigned_to_user_id ${textInList(userIds)}
             )
           )
           -- Claim-linked work where a selected user is a claim assignee
@@ -114,7 +118,7 @@ export class ScheduleService {
             )
             AND EXISTS (
               SELECT 1 FROM claim_assignees ca
-              WHERE ca.claim_id = schedule_events.claim_id AND ca.user_id ${uuidInList(userIds)}
+              WHERE ca.claim_id = schedule_events.claim_id AND ca.user_id ${textInList(userIds)}
             )
           )
         )`;

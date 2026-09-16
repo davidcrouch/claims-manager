@@ -1331,3 +1331,13 @@
   Entity attachments are easier to search and browse; claim detail shows the insured party.
   Archive actions and list table scrolling are streamlined across major list screens.
   Documentation updated for the journal editing approach.
+
+- `2026-09-16` `88c03cd` **2 h**
+  `21 files | +64 −50 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Schedule filtering by person works again, and column headers stay visible while scrolling long lists across the main work screens.
+  **Schedule user filter fix and sticky list headers.**
+  Schedule views filtered by assigned staff no longer fail when matching people on tasks, jobs, quotes, messages, claims, or appointments.
+  Column headers stay pinned at the top while scrolling claims, jobs, tasks, quotes, invoices, and related lists.
+  Wide tables still scroll with the page so headers remain aligned with the rows beneath them.
+  Same sticky-header behaviour applied across appointments, assessments, bills, contacts, documents, journals, messages, proposals, purchase orders, reports, RFQs, vendors, and work orders.
+  Outcome: planners can filter the calendar by person, and staff keep their place in long lists without losing column context.

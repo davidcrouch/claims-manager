@@ -152,9 +152,9 @@ export function AppointmentsTable({
   const expandedColSpan = visibleCount + 1;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
+        <thead className="bg-slate-50 [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <th scope="col" className="px-4 py-2.5 w-8" />
             {useSortableHeaders ? (
