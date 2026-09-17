@@ -603,10 +603,6 @@ function asObjectArray(value: unknown): JsonObject[] {
   );
 }
 
-function asNonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
 function normaliseName(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
