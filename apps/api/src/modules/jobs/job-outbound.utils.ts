@@ -100,6 +100,20 @@ export function lookupToCwObject(lookup: {
 }
 
 /**
+ * Human job number for CW API body `externalReference` (not the local DB column).
+ * Prefer insurer/CW job number (`externalJobId`), else local `internalNumber`.
+ * Never use local `jobs.externalReference` (that stores the CW UUID).
+ */
+export function resolveCwJobExternalReference(job: {
+  externalJobId?: string | null;
+  internalNumber?: string | null;
+}): string | undefined {
+  return (
+    asNonEmptyString(job.externalJobId) ?? asNonEmptyString(job.internalNumber)
+  );
+}
+
+/**
  * Build the CW POST /jobs body from local create fields + claim context.
  */
 export function buildCrunchworkJobCreateBody(params: {
@@ -114,6 +128,8 @@ export function buildCrunchworkJobCreateBody(params: {
   jobInstructions?: string | null;
   requestDate?: string | null;
   collectExcess?: boolean | null;
+  /** CW body field only — do not persist to local jobs.externalReference. */
+  externalReference?: string | null;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     claimId: params.cwClaimId,
@@ -134,6 +150,8 @@ export function buildCrunchworkJobCreateBody(params: {
   if (instructions) body.jobInstructions = instructions;
   const requestDate = asNonEmptyString(params.requestDate);
   if (requestDate) body.requestDate = requestDate;
+  const externalReference = asNonEmptyString(params.externalReference);
+  if (externalReference) body.externalReference = externalReference;
 
   return body;
 }

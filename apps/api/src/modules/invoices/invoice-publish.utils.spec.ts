@@ -9,6 +9,7 @@ import {
   mergeInvoicedAmountMaps,
   pickCrunchworkInvoiceIdForPurchaseOrder,
   preferExistingAmount,
+  resolveCwInvoiceExternalReference,
   shouldUseCrunchworkProgressInvoice,
   sumLocalGroupsInclusiveTotal,
   toInvoiceUpdateGroups,
@@ -30,11 +31,41 @@ describe('preferExistingAmount', () => {
   });
 });
 
+describe('resolveCwInvoiceExternalReference', () => {
+  it('prefers invoiceNumber over internalNumber', () => {
+    expect(
+      resolveCwInvoiceExternalReference({
+        invoiceNumber: 'INV-200016',
+        internalNumber: 'INV-000001',
+      }),
+    ).toBe('INV-200016');
+  });
+
+  it('falls back to internalNumber when invoiceNumber is blank', () => {
+    expect(
+      resolveCwInvoiceExternalReference({
+        invoiceNumber: null,
+        internalNumber: 'INV-000001',
+      }),
+    ).toBe('INV-000001');
+  });
+});
+
 describe('buildCrunchworkVendorTaxInvoiceCreateBody', () => {
-  it('sends only CreateVendorTaxInvoiceInput fields', () => {
+  it('sends CreateVendorTaxInvoiceInput fields and optional CW externalReference', () => {
     expect(buildCrunchworkVendorTaxInvoiceCreateBody({ purchaseOrderId: 'po-1' })).toEqual({
       purchaseOrderId: 'po-1',
       invoiceType: { externalReference: 'Invoice' },
+    });
+    expect(
+      buildCrunchworkVendorTaxInvoiceCreateBody({
+        purchaseOrderId: 'po-1',
+        externalReference: 'INV-200016',
+      }),
+    ).toEqual({
+      purchaseOrderId: 'po-1',
+      invoiceType: { externalReference: 'Invoice' },
+      externalReference: 'INV-200016',
     });
   });
 });

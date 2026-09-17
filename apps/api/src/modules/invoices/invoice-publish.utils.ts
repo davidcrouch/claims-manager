@@ -23,6 +23,27 @@ import {
 
 type JsonObject = Record<string, unknown>;
 
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Human invoice number for CW API body `externalReference` (not the local DB column).
+ * Prefer display invoice number, else local `internalNumber`.
+ * Never use local `invoices.externalReference` (that stores the CW UUID).
+ */
+export function resolveCwInvoiceExternalReference(invoice: {
+  invoiceNumber?: string | null;
+  internalNumber?: string | null;
+}): string | undefined {
+  return (
+    asNonEmptyString(invoice.invoiceNumber) ??
+    asNonEmptyString(invoice.internalNumber)
+  );
+}
+
 /**
  * CW create-invoice often echoes totals as 0. Keep a non-zero local amount
  * instead of overwriting it with a stub provider value.
@@ -49,13 +70,18 @@ export function preferExistingAmount(
 
 export function buildCrunchworkVendorTaxInvoiceCreateBody(params: {
   purchaseOrderId: string;
+  /** CW body field only — do not persist to local invoices.externalReference. */
+  externalReference?: string | null;
 }): JsonObject {
-  return {
+  const body: JsonObject = {
     purchaseOrderId: params.purchaseOrderId,
     // CreateVendorTaxInvoiceInput — CW resolves this to a Vendor Tax Invoice.
     // Omitting invoiceType causes upstream: Cannot read properties of undefined (reading 'externalReference').
     invoiceType: { externalReference: 'Invoice' },
   };
+  const externalReference = asNonEmptyString(params.externalReference);
+  if (externalReference) body.externalReference = externalReference;
+  return body;
 }
 
 export type CrunchworkInvoiceKind = 'progress' | 'vendorTax';
@@ -89,6 +115,8 @@ export function buildCrunchworkProgressInvoiceBody(params: {
   comments?: string | null;
   total: number;
   totalTax?: number | null;
+  /** CW body field only — do not persist to local invoices.externalReference. */
+  externalReference?: string | null;
 }): JsonObject {
   const body: JsonObject = {
     purchaseOrderId: params.purchaseOrderId,
@@ -100,6 +128,8 @@ export function buildCrunchworkProgressInvoiceBody(params: {
   if (params.totalTax != null && Number.isFinite(params.totalTax)) {
     body.totalTax = roundCents(params.totalTax);
   }
+  const externalReference = asNonEmptyString(params.externalReference);
+  if (externalReference) body.externalReference = externalReference;
   return body;
 }
 

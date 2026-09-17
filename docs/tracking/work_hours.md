@@ -1341,3 +1341,12 @@
   Wide tables still scroll with the page so headers remain aligned with the rows beneath them.
   Same sticky-header behaviour applied across appointments, assessments, bills, contacts, documents, journals, messages, proposals, purchase orders, reports, RFQs, vendors, and work orders.
   Outcome: planners can filter the calendar by person, and staff keep their place in long lists without losing column context.
+- `2026-09-17` `PENDING` **1 h**
+  `12 files | +356 −10 | Tier 3 complex | Moderate orchestration`
+  Lay summary: When jobs, quotes, and invoices are sent to the insurer system, the human-readable number goes with them, while the local link ID stays unchanged.
+  **Outbound human reference numbers for jobs, quotes, and invoices.**
+  Partner create and update requests now carry the display job, quote, or invoice number where the insurer expects it.
+  Local stored partner IDs are no longer overwritten by those display numbers on publish.
+  Shared helpers resolve the best available number for each record type consistently.
+  Automated tests cover the adapter and publish helpers for the new reference behaviour.
+  Outcome: insurer records show the correct business numbers without breaking local partner-ID links.

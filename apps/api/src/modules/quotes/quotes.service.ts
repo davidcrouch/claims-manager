@@ -48,6 +48,7 @@ import {
   escapeRegExp,
   nextVariationInternalNumber,
 } from './variation-number';
+import { resolveCwQuoteExternalReference } from './quote-outbound.utils';
 
 export interface PublishResult {
   quote: Record<string, unknown> | null;
@@ -626,6 +627,8 @@ export class QuotesService {
     quoteFrom: unknown;
     apiPayload?: unknown;
     publisherEmail?: string | null;
+    /** CW body field only — do not persist to local quotes.externalReference. */
+    externalReference?: string | null;
   }): Promise<Record<string, unknown>> {
     const fromParty = await this.enrichFromPartyFromOrganisation({
       tenantId: params.tenantId,
@@ -635,10 +638,16 @@ export class QuotesService {
       }),
       publisherEmail: params.publisherEmail,
     });
-    return {
+    const body: Record<string, unknown> = {
       status: (await this.resolvePublishedStatus({ tenantId: params.tenantId })).outbound,
       ...this.flattenPartyForOutbound('from', fromParty),
     };
+    const externalReference =
+      typeof params.externalReference === 'string' && params.externalReference.trim()
+        ? params.externalReference.trim()
+        : undefined;
+    if (externalReference) body.externalReference = externalReference;
+    return body;
   }
 
   private contactToParty(params: {
@@ -1235,6 +1244,8 @@ export class QuotesService {
         alreadyPending: existing.statusLookupId === pendingStatus.lookupId,
         quoteFrom: existing.quoteFrom,
         apiPayload: existing.apiPayload,
+        quoteNumber: existing.quoteNumber,
+        internalNumber: existing.internalNumber,
       });
     }
 
@@ -1270,6 +1281,14 @@ export class QuotesService {
       ...this.flattenPartyForOutbound('for', existing.quoteFor),
       ...this.flattenPartyForOutbound('from', fromParty),
     };
+    // CW API body only — local quotes.externalReference stays CW UUID.
+    const cwExternalReference = resolveCwQuoteExternalReference({
+      quoteNumber: existing.quoteNumber,
+      internalNumber: existing.internalNumber,
+    });
+    if (cwExternalReference) {
+      outboundBody.externalReference = cwExternalReference;
+    }
     if (custom.quoteType) {
       const qt = custom.quoteType;
       outboundBody.quoteType =
@@ -1335,6 +1354,7 @@ export class QuotesService {
               quoteFrom: existing.quoteFrom,
               apiPayload: existing.apiPayload,
               publisherEmail: params.userEmail,
+              externalReference: cwExternalReference,
             }),
           },
         sourceEvent: isResubmission ? 'api:republish' : 'api:publish',
@@ -1480,6 +1500,8 @@ export class QuotesService {
     alreadyPending: boolean;
     quoteFrom?: unknown;
     apiPayload?: unknown;
+    quoteNumber?: string | null;
+    internalNumber?: string | null;
   }): Promise<PublishResult> {
     const outboundSync = this.outboundSync;
     if (!outboundSync) {
@@ -1501,6 +1523,11 @@ export class QuotesService {
       },
     });
 
+    const cwExternalReference = resolveCwQuoteExternalReference({
+      quoteNumber: params.quoteNumber,
+      internalNumber: params.internalNumber,
+    });
+
     try {
       const queueId = await outboundSync.enqueue({
         tenantId: params.tenantId,
@@ -1515,6 +1542,7 @@ export class QuotesService {
             quoteFrom: params.quoteFrom,
             apiPayload: params.apiPayload,
             publisherEmail: params.userEmail,
+            externalReference: cwExternalReference,
           }),
         },
         sourceEvent: 'api:publish-status',

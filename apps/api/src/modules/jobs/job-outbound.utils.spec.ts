@@ -5,6 +5,7 @@ import {
   isCwUsableLookupRef,
   lookupToCwObject,
   pickCrunchworkJobDates,
+  resolveCwJobExternalReference,
   toCrunchworkDate,
 } from './job-outbound.utils';
 
@@ -75,6 +76,36 @@ describe('job-outbound.utils', () => {
     });
   });
 
+  describe('resolveCwJobExternalReference', () => {
+    it('prefers externalJobId over internalNumber', () => {
+      expect(
+        resolveCwJobExternalReference({
+          externalJobId: 'JOB-200073',
+          internalNumber: 'JOB-000001',
+        }),
+      ).toBe('JOB-200073');
+    });
+
+    it('falls back to internalNumber when externalJobId is blank', () => {
+      expect(
+        resolveCwJobExternalReference({
+          externalJobId: '  ',
+          internalNumber: 'JOB-000001',
+        }),
+      ).toBe('JOB-000001');
+    });
+
+    it('returns undefined when both are missing', () => {
+      expect(resolveCwJobExternalReference({})).toBeUndefined();
+      expect(
+        resolveCwJobExternalReference({
+          externalJobId: null,
+          internalNumber: null,
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   describe('buildCrunchworkJobCreateBody', () => {
     it('builds CW create body with required fields and omits contacts by default', () => {
       const body = buildCrunchworkJobCreateBody({
@@ -95,6 +126,16 @@ describe('job-outbound.utils', () => {
       expect(body).not.toHaveProperty('contacts');
       expect(body).not.toHaveProperty('jobTypeLookupId');
       expect(body).not.toHaveProperty('claimIdLookup');
+      expect(body).not.toHaveProperty('externalReference');
+    });
+
+    it('sets CW body externalReference from the human job number when provided', () => {
+      const body = buildCrunchworkJobCreateBody({
+        cwClaimId: '3ce05f84-4b1b-493f-b588-08ff49e86b94',
+        jobType: { externalReference: 'MS' },
+        externalReference: 'JOB-200073',
+      });
+      expect(body.externalReference).toBe('JOB-200073');
     });
 
     it('includes contacts only when explicitly provided', () => {

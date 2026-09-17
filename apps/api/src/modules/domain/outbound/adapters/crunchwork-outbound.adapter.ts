@@ -124,6 +124,10 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
         const createBody = {
           purchaseOrderId,
           invoiceType: { externalReference: 'Invoice' },
+          ...(typeof payload.externalReference === 'string' &&
+          payload.externalReference.trim()
+            ? { externalReference: payload.externalReference.trim() }
+            : {}),
         };
         try {
           const createResponse = await this.crunchwork.createInvoice({
@@ -188,9 +192,17 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
 
       // CW CreateVendorTaxInvoiceInput is minimal; set Submitted on update
       // (status.externalReference per Insurance REST API §3.3.7).
+      // Top-level externalReference = human invoice number (API only; local DB
+      // column stores the CW UUID).
       const updateBody: Record<string, unknown> = {
         status: { externalReference: 'Submitted' },
       };
+      if (
+        typeof payload.externalReference === 'string' &&
+        payload.externalReference.trim()
+      ) {
+        updateBody.externalReference = payload.externalReference.trim();
+      }
       if (
         typeof payload.vendorInvoiceNumber === 'string' &&
         payload.vendorInvoiceNumber
