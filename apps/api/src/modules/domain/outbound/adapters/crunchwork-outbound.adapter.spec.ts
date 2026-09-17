@@ -84,43 +84,6 @@ describe('CrunchworkOutboundAdapter.push invoice publish', () => {
     expect(result.externalReference).toBe(CW_INVOICE_ID);
   });
 
-  it('sends human invoice number as CW body externalReference on create and update', async () => {
-    createInvoice.mockResolvedValue({
-      id: CW_INVOICE_ID,
-      groups: [],
-    });
-    updateInvoice.mockResolvedValue({ id: CW_INVOICE_ID });
-
-    await adapter.push({
-      connectionId: 'conn-1',
-      entityType: 'invoice',
-      entityId: 'inv-1',
-      action: 'publish',
-      payload: {
-        purchaseOrderId: 'po-cw',
-        externalReference: 'INV-200016',
-        vendorInvoiceNumber: 'INV-200016',
-        localGroups: [],
-      },
-    });
-
-    expect(createInvoice).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      body: {
-        purchaseOrderId: 'po-cw',
-        invoiceType: { externalReference: 'Invoice' },
-        externalReference: 'INV-200016',
-      },
-    });
-    expect(updateInvoice.mock.calls[0][0].body).toEqual(
-      expect.objectContaining({
-        status: { externalReference: 'Submitted' },
-        externalReference: 'INV-200016',
-        vendorInvoiceNumber: 'INV-200016',
-      }),
-    );
-  });
-
   it('discovers linked invoice via job invoices when create is blocked', async () => {
     createInvoice.mockRejectedValue(
       new Error(
@@ -449,44 +412,6 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
     expect(result.externalReference).toBe(CW_QUOTE_ID);
   });
 
-  it('forwards human estimate number as CW body externalReference on create and publish', async () => {
-    createQuote.mockResolvedValue({
-      id: CW_QUOTE_ID,
-      status: { name: 'Draft', externalReference: 'Draft' },
-    });
-    updateQuote.mockResolvedValue({
-      id: CW_QUOTE_ID,
-      status: { name: 'Published', externalReference: 'Published' },
-    });
-
-    await adapter.push({
-      connectionId: 'conn-1',
-      entityType: 'quote',
-      entityId: 'quote-1',
-      action: 'publish',
-      payload: {
-        createBody: {
-          name: 'Estimate 1',
-          externalReference: 'EST-200073',
-        },
-        publishBody: {
-          status: { name: 'Published', externalReference: 'Published' },
-          externalReference: 'EST-200073',
-        },
-      },
-    });
-
-    expect(createQuote).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      body: expect.objectContaining({ externalReference: 'EST-200073' }),
-    });
-    expect(updateQuote).toHaveBeenCalledWith({
-      connectionId: 'conn-1',
-      quoteId: CW_QUOTE_ID,
-      body: expect.objectContaining({ externalReference: 'EST-200073' }),
-    });
-  });
-
   it('skips create when cwQuoteId is already on the payload', async () => {
     updateQuote.mockResolvedValue({
       id: CW_QUOTE_ID,
@@ -577,7 +502,7 @@ describe('CrunchworkOutboundAdapter.push quote publish', () => {
 describe('CrunchworkOutboundAdapter.push job update', () => {
   const CW_JOB_UUID = 'cccccccc-3333-4333-8333-cccccccccccc';
 
-  it('forwards human job number as CW body externalReference without using it as path id', async () => {
+  it('forwards human job number as CW body vendorJobNumber without using it as path id', async () => {
     const updateJob = jest.fn().mockResolvedValue({ id: CW_JOB_UUID });
     const adapter = new CrunchworkOutboundAdapter({
       updateJob,
@@ -590,7 +515,7 @@ describe('CrunchworkOutboundAdapter.push job update', () => {
       action: 'update',
       payload: {
         externalId: CW_JOB_UUID,
-        externalReference: 'JOB-200073',
+        vendorJobNumber: 'JOB-200073',
         jobInstructions: 'Attend site',
       },
     });
@@ -599,10 +524,82 @@ describe('CrunchworkOutboundAdapter.push job update', () => {
       connectionId: 'conn-1',
       jobId: CW_JOB_UUID,
       body: expect.objectContaining({
-        externalReference: 'JOB-200073',
+        vendorJobNumber: 'JOB-200073',
         jobInstructions: 'Attend site',
       }),
     });
     expect(updateJob.mock.calls[0][0].body).not.toHaveProperty('externalId');
+    expect(updateJob.mock.calls[0][0].body).not.toHaveProperty('externalReference');
+  });
+
+  it('sends status via updateJobStatus and keeps it off the general update body', async () => {
+    const updateJob = jest.fn().mockResolvedValue({ id: CW_JOB_UUID });
+    const updateJobStatus = jest.fn().mockResolvedValue({
+      id: CW_JOB_UUID,
+      status: { externalReference: 'Awaiting Scope' },
+    });
+    const adapter = new CrunchworkOutboundAdapter({
+      updateJob,
+      updateJobStatus,
+    } as unknown as CrunchworkService);
+
+    await adapter.push({
+      connectionId: 'conn-1',
+      entityType: 'job',
+      entityId: 'local-job-1',
+      action: 'update',
+      payload: {
+        externalId: CW_JOB_UUID,
+        vendorJobNumber: 'JOB-200073',
+        jobInstructions: 'Attend site',
+        statusLookupId: 'local-status-uuid',
+        status: { externalReference: 'Awaiting Scope', name: 'Awaiting Scope' },
+      },
+    });
+
+    expect(updateJob).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      jobId: CW_JOB_UUID,
+      body: expect.objectContaining({
+        vendorJobNumber: 'JOB-200073',
+        jobInstructions: 'Attend site',
+      }),
+    });
+    expect(updateJob.mock.calls[0][0].body).not.toHaveProperty('status');
+    expect(updateJob.mock.calls[0][0].body).not.toHaveProperty('statusLookupId');
+    expect(updateJobStatus).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      jobId: CW_JOB_UUID,
+      body: {
+        status: { externalReference: 'Awaiting Scope', name: 'Awaiting Scope' },
+      },
+    });
+  });
+
+  it('status_change calls updateJobStatus only', async () => {
+    const updateJob = jest.fn();
+    const updateJobStatus = jest.fn().mockResolvedValue({ id: CW_JOB_UUID });
+    const adapter = new CrunchworkOutboundAdapter({
+      updateJob,
+      updateJobStatus,
+    } as unknown as CrunchworkService);
+
+    await adapter.push({
+      connectionId: 'conn-1',
+      entityType: 'job',
+      entityId: 'local-job-1',
+      action: 'status_change',
+      payload: {
+        externalId: CW_JOB_UUID,
+        step: 'Complete',
+      },
+    });
+
+    expect(updateJob).not.toHaveBeenCalled();
+    expect(updateJobStatus).toHaveBeenCalledWith({
+      connectionId: 'conn-1',
+      jobId: CW_JOB_UUID,
+      body: { status: { externalReference: 'Complete' } },
+    });
   });
 });

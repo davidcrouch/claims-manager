@@ -23,7 +23,7 @@ import {
   claimApiContactsToOutbound,
   isCwUsableLookupRef,
   lookupToCwObject,
-  resolveCwJobExternalReference,
+  resolveCwVendorJobNumber,
   type CwContactOutbound,
 } from './job-outbound.utils';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
@@ -387,8 +387,8 @@ export class JobsService {
           body,
           claim,
           claimApiPayload,
-          // CW API body only — local jobs.externalReference stays CW UUID / null.
-          externalReference: resolveCwJobExternalReference({
+          // CW API body vendorJobNumber — local jobs.externalReference stays CW UUID / null.
+          vendorJobNumber: resolveCwVendorJobNumber({
             externalJobId,
             internalNumber,
           }),
@@ -618,12 +618,30 @@ export class JobsService {
           !Array.isArray(existingApi.customData)
             ? (existingApi.customData as Record<string, unknown>)
             : undefined;
-        // CW body externalReference = human job number only — never write this
+        // CW body vendorJobNumber = human job number — never write this
         // into local jobs.externalReference (that column stores the CW UUID).
-        const cwExternalReference = resolveCwJobExternalReference({
+        const vendorJobNumber = resolveCwVendorJobNumber({
           externalJobId: existing.externalJobId,
           internalNumber: existing.internalNumber,
         });
+
+        // Resolve local statusLookupId → CW status{externalReference} for
+        // POST /jobs/{id}/status (Update Job does not propagate status alone).
+        let cwStatus: { externalReference: string; name?: string } | undefined;
+        const statusLookupId = params.body.statusLookupId as string | undefined;
+        if (statusLookupId) {
+          const statusLookup = await this.lookupsRepo.findOne({
+            id: statusLookupId,
+            tenantId,
+          });
+          cwStatus = lookupToCwObject(statusLookup) ?? undefined;
+          if (!cwStatus) {
+            this.logger.warn(
+              `JobsService.update — statusLookupId=${statusLookupId} has no usable CW externalReference; status will not sync`,
+            );
+          }
+        }
+
         await this.outboundSync.enqueue({
           tenantId,
           connectionId,
@@ -633,9 +651,8 @@ export class JobsService {
           payload: {
             ...params.body,
             externalId: existing.externalReference,
-            ...(cwExternalReference
-              ? { externalReference: cwExternalReference }
-              : {}),
+            ...(vendorJobNumber ? { vendorJobNumber } : {}),
+            ...(cwStatus ? { status: cwStatus } : {}),
             ...(existingCwCustom ? { cwCustomData: existingCwCustom } : {}),
           },
           idempotencyKey: `update:job:${params.id}:${Date.now()}`,
@@ -954,8 +971,8 @@ export class JobsService {
     body: Record<string, unknown>;
     claim: Awaited<ReturnType<ClaimsRepository['findOne']>>;
     claimApiPayload: Record<string, unknown> | null;
-    /** CW API body field only — not persisted to jobs.externalReference. */
-    externalReference?: string | null;
+    /** CW API body vendorJobNumber only — not persisted to jobs.externalReference. */
+    vendorJobNumber?: string | null;
   }): Promise<Record<string, unknown>> {
     const nestedJobType = params.body.jobType as { id?: string } | undefined;
     const jobTypeLookupId =
@@ -1024,7 +1041,7 @@ export class JobsService {
         params.body.excess != null ? (params.body.excess as number | string) : null,
       jobInstructions: asNonEmptyString(params.body.jobInstructions) ?? null,
       requestDate: asNonEmptyString(params.body.requestDate) ?? null,
-      externalReference: params.externalReference,
+      vendorJobNumber: params.vendorJobNumber,
     });
   }
 
@@ -1294,7 +1311,7 @@ export class JobsService {
     if (body.name !== undefined) data.name = (body.name as string) || null;
     // Do not map body.externalReference → jobs.externalReference.
     // Local column stores the CW UUID (set by inbound/create response).
-    // Human job number goes only on CW API payloads via resolveCwJobExternalReference.
+    // Human job number goes only on CW API payloads via resolveCwVendorJobNumber.
     if (body.vendorId !== undefined) data.vendorId = body.vendorId as string;
     if (body.statusLookupId !== undefined) data.statusLookupId = body.statusLookupId as string;
     if (body.address !== undefined) {

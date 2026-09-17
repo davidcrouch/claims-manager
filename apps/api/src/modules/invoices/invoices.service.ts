@@ -33,7 +33,6 @@ import {
   crunchworkInvoiceGroupsFromPayload,
   mergeInvoicedAmountMaps,
   preferExistingAmount,
-  resolveCwInvoiceExternalReference,
   shouldUseCrunchworkProgressInvoice,
   sumLocalGroupsInclusiveTotal,
   toInvoiceUpdateGroups,
@@ -1181,11 +1180,6 @@ export class InvoicesService {
                 totalTax: progressMoney.totalTax,
               }
             : {}),
-          // CW API body only — local invoices.externalReference stays CW UUID.
-          externalReference: resolveCwInvoiceExternalReference({
-            invoiceNumber: existing.invoiceNumber,
-            internalNumber: existing.internalNumber,
-          }),
           vendorInvoiceNumber: existing.invoiceNumber ?? existing.internalNumber ?? null,
           issueDate: existing.issueDate
             ? new Date(existing.issueDate as string | Date).toISOString()

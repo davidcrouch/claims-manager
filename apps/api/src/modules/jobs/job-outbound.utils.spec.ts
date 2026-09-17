@@ -5,7 +5,8 @@ import {
   isCwUsableLookupRef,
   lookupToCwObject,
   pickCrunchworkJobDates,
-  resolveCwJobExternalReference,
+  pickCrunchworkJobStatus,
+  resolveCwVendorJobNumber,
   toCrunchworkDate,
 } from './job-outbound.utils';
 
@@ -76,10 +77,10 @@ describe('job-outbound.utils', () => {
     });
   });
 
-  describe('resolveCwJobExternalReference', () => {
+  describe('resolveCwVendorJobNumber', () => {
     it('prefers externalJobId over internalNumber', () => {
       expect(
-        resolveCwJobExternalReference({
+        resolveCwVendorJobNumber({
           externalJobId: 'JOB-200073',
           internalNumber: 'JOB-000001',
         }),
@@ -88,7 +89,7 @@ describe('job-outbound.utils', () => {
 
     it('falls back to internalNumber when externalJobId is blank', () => {
       expect(
-        resolveCwJobExternalReference({
+        resolveCwVendorJobNumber({
           externalJobId: '  ',
           internalNumber: 'JOB-000001',
         }),
@@ -96,9 +97,9 @@ describe('job-outbound.utils', () => {
     });
 
     it('returns undefined when both are missing', () => {
-      expect(resolveCwJobExternalReference({})).toBeUndefined();
+      expect(resolveCwVendorJobNumber({})).toBeUndefined();
       expect(
-        resolveCwJobExternalReference({
+        resolveCwVendorJobNumber({
           externalJobId: null,
           internalNumber: null,
         }),
@@ -127,15 +128,17 @@ describe('job-outbound.utils', () => {
       expect(body).not.toHaveProperty('jobTypeLookupId');
       expect(body).not.toHaveProperty('claimIdLookup');
       expect(body).not.toHaveProperty('externalReference');
+      expect(body).not.toHaveProperty('vendorJobNumber');
     });
 
-    it('sets CW body externalReference from the human job number when provided', () => {
+    it('sets CW body vendorJobNumber from the human job number when provided', () => {
       const body = buildCrunchworkJobCreateBody({
         cwClaimId: '3ce05f84-4b1b-493f-b588-08ff49e86b94',
         jobType: { externalReference: 'MS' },
-        externalReference: 'JOB-200073',
+        vendorJobNumber: 'JOB-200073',
       });
-      expect(body.externalReference).toBe('JOB-200073');
+      expect(body.vendorJobNumber).toBe('JOB-200073');
+      expect(body).not.toHaveProperty('externalReference');
     });
 
     it('includes contacts only when explicitly provided', () => {
@@ -152,6 +155,38 @@ describe('job-outbound.utils', () => {
         ],
       });
       expect(body.contacts).toHaveLength(1);
+    });
+  });
+
+  describe('pickCrunchworkJobStatus', () => {
+    it('reads a resolved CW status object', () => {
+      expect(
+        pickCrunchworkJobStatus({
+          status: { externalReference: 'Awaiting Scope', name: 'Awaiting Scope' },
+        }),
+      ).toEqual({
+        externalReference: 'Awaiting Scope',
+        name: 'Awaiting Scope',
+      });
+    });
+
+    it('reads a string status or workflow step when usable', () => {
+      expect(pickCrunchworkJobStatus({ status: 'Scheduled' })).toEqual({
+        externalReference: 'Scheduled',
+      });
+      expect(pickCrunchworkJobStatus({ step: 'Complete' })).toEqual({
+        externalReference: 'Complete',
+      });
+    });
+
+    it('ignores seed/direct refs and missing status', () => {
+      expect(
+        pickCrunchworkJobStatus({
+          status: { externalReference: 'seed-job-status-pending' },
+        }),
+      ).toBeUndefined();
+      expect(pickCrunchworkJobStatus({ statusLookupId: 'local-uuid' })).toBeUndefined();
+      expect(pickCrunchworkJobStatus({})).toBeUndefined();
     });
   });
 
@@ -207,7 +242,38 @@ describe('job-outbound.utils', () => {
       expect(body.customData).not.toHaveProperty('workflowPhase');
     });
 
-    it('leaves the body unchanged when dates are absent', () => {
+    it('overlays claimRecommendation onto CW customData and strips top-level', () => {
+      const body = applyCrunchworkJobDates(
+        { claimRecommendation: 'Accept', jobInstructions: 'Review' },
+        {
+          customData: { claimRecommendation: 'Accept', workflowPhase: 'scheduled' },
+          cwCustomData: { insurerNote: 'keep-me' },
+        },
+      );
+
+      expect(body).toEqual({
+        jobInstructions: 'Review',
+        customData: {
+          insurerNote: 'keep-me',
+          claimRecommendation: 'Accept',
+        },
+      });
+      expect(body).not.toHaveProperty('claimRecommendation');
+      expect(body.customData).not.toHaveProperty('workflowPhase');
+    });
+
+    it('reads claimRecommendation from customData when top-level is absent', () => {
+      const body = applyCrunchworkJobDates(
+        {},
+        { customData: { claimRecommendation: 'Decline' } },
+      );
+
+      expect(body).toEqual({
+        customData: { claimRecommendation: 'Decline' },
+      });
+    });
+
+    it('leaves the body unchanged when dates and claimRecommendation are absent', () => {
       expect(applyCrunchworkJobDates({ status: { externalReference: 'Pending' } }, {})).toEqual({
         status: { externalReference: 'Pending' },
       });

@@ -273,9 +273,8 @@ export async function updateJobFieldsAction(
       customPatch.estimatedCompletionDate = fields.estimatedCompletionDate;
     }
     if (fields.claimRecommendation !== undefined) {
+      // CW outbound maps this to customData.claimRecommendation.
       customPatch.claimRecommendation = fields.claimRecommendation;
-      // Top-level for CW outbound (transformJobPayload omits nested customData except dates).
-      body.claimRecommendation = fields.claimRecommendation;
     }
     if (Object.keys(customPatch).length > 0) {
       body.customData = { ...existingCustom, ...customPatch };

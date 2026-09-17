@@ -275,7 +275,7 @@ The following CW fields are stored into the `custom_data` JSONB bucket by the tr
 | `estimatedStartDate` | `estimatedStartDate` |
 | `estimatedCompletionDate` | `estimatedCompletionDate` |
 | `estimatedDeliveryDate` | `estimatedDeliveryDate` |
-| `claimRecommendation` | `claimRecommendation` |
+| `claimRecommendation` (inbound top-level; outbound under `customData`) | `claimRecommendation` |
 | `approvalLimitApplicable` | `approvalLimitApplicable` |
 | `internalAllocatedVendorJobId` | `internalAllocatedVendorJobId` |
 | `internalAllocatedVendorJobReference` | `internalAllocatedVendorJobReference` |
@@ -297,7 +297,7 @@ The following CW fields are stored into the `custom_data` JSONB bucket by the tr
 Inbound vs outbound contract rules:
 
 - **`jobType.externalReference` — "Fail API Call" on unknown value (outbound).** Inbound auto-creates a lookup stub because webhook ingest has no synchronous 4xx caller.
-- **`status.externalReference` — "Fail API Call" (outbound).** Inbound logs `UNRESOLVED_LOOKUP` and continues.
+- **`status.externalReference` — "Fail API Call" (outbound).** Inbound logs `UNRESOLVED_LOOKUP` and continues. On job **update**, local `statusLookupId` is resolved to CW `status{externalReference}` and sent via **`POST /jobs/{id}/status`** (not the general Update Job body).
 - **`vendor.externalReference` — "Fail API Call" (outbound).** Inbound resolves best-effort or leaves `vendor_id` null.
 - **`contacts[]` — "Add Mapping Value and Record" / "Continue API call".** Contacts without `externalReference` are skipped with a warning; type/method lookups leave FK null on miss.
 

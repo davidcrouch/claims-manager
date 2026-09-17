@@ -100,11 +100,11 @@ export function lookupToCwObject(lookup: {
 }
 
 /**
- * Human job number for CW API body `externalReference` (not the local DB column).
+ * Human job number for CW API body `vendorJobNumber` (not a local DB column).
  * Prefer insurer/CW job number (`externalJobId`), else local `internalNumber`.
  * Never use local `jobs.externalReference` (that stores the CW UUID).
  */
-export function resolveCwJobExternalReference(job: {
+export function resolveCwVendorJobNumber(job: {
   externalJobId?: string | null;
   internalNumber?: string | null;
 }): string | undefined {
@@ -128,8 +128,8 @@ export function buildCrunchworkJobCreateBody(params: {
   jobInstructions?: string | null;
   requestDate?: string | null;
   collectExcess?: boolean | null;
-  /** CW body field only — do not persist to local jobs.externalReference. */
-  externalReference?: string | null;
+  /** CW body field only — our local job number for the vendor tenancy. */
+  vendorJobNumber?: string | null;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     claimId: params.cwClaimId,
@@ -150,8 +150,8 @@ export function buildCrunchworkJobCreateBody(params: {
   if (instructions) body.jobInstructions = instructions;
   const requestDate = asNonEmptyString(params.requestDate);
   if (requestDate) body.requestDate = requestDate;
-  const externalReference = asNonEmptyString(params.externalReference);
-  if (externalReference) body.externalReference = externalReference;
+  const vendorJobNumber = asNonEmptyString(params.vendorJobNumber);
+  if (vendorJobNumber) body.vendorJobNumber = vendorJobNumber;
 
   return body;
 }
@@ -196,7 +196,55 @@ export function pickCrunchworkJobDates(
 }
 
 /**
- * Overlay job schedule dates onto CW customData (preserving existing CW keys).
+ * CW job status for POST /jobs/{id}/status (and create body).
+ * Accepts a resolved `{ externalReference }` object, or a string ref / workflow step.
+ */
+export function pickCrunchworkJobStatus(
+  payload: Record<string, unknown>,
+): { externalReference: string; name?: string } | undefined {
+  const raw = payload.status !== undefined ? payload.status : payload.step;
+  if (raw == null) return undefined;
+
+  if (typeof raw === 'string') {
+    const externalReference = asNonEmptyString(raw);
+    if (!externalReference || !isCwUsableLookupRef(externalReference)) {
+      return undefined;
+    }
+    return { externalReference };
+  }
+
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return lookupToCwObject(
+      raw as { name?: string | null; externalReference?: string | null },
+    ) ?? undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Read claimRecommendation from an outbound job payload.
+ * Local edits live on customData; legacy callers may still set it top-level.
+ */
+export function pickCrunchworkClaimRecommendation(
+  payload: Record<string, unknown>,
+): string | null | undefined {
+  const custom = isPlainObject(payload.customData) ? payload.customData : {};
+  const raw =
+    payload.claimRecommendation !== undefined
+      ? payload.claimRecommendation
+      : custom.claimRecommendation !== undefined
+        ? custom.claimRecommendation
+        : undefined;
+  if (raw === undefined) return undefined;
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return null;
+  return raw;
+}
+
+/**
+ * Overlay CW-bound customData fields (schedule dates + claimRecommendation)
+ * onto the outbound body, preserving existing CW keys.
  * Local-only customData keys are not forwarded.
  */
 export function applyCrunchworkJobDates(
@@ -204,16 +252,24 @@ export function applyCrunchworkJobDates(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
   const dates = pickCrunchworkJobDates(payload);
-  if (Object.keys(dates).length === 0) return body;
+  const claimRecommendation = pickCrunchworkClaimRecommendation(payload);
+  if (Object.keys(dates).length === 0 && claimRecommendation === undefined) {
+    return body;
+  }
 
   const existingCwCustom = isPlainObject(payload.cwCustomData)
     ? payload.cwCustomData
     : {};
+  // Never forward claimRecommendation as a CW top-level field.
+  const { claimRecommendation: _omitTopLevel, ...rest } = body;
   return {
-    ...body,
+    ...rest,
     customData: {
       ...existingCwCustom,
       ...dates,
+      ...(claimRecommendation !== undefined
+        ? { claimRecommendation }
+        : {}),
     },
   };
 }

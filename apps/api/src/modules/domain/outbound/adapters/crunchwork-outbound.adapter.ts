@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CrunchworkService } from '../../../../crunchwork/crunchwork.service';
-import { applyCrunchworkJobDates } from '../../../jobs/job-outbound.utils';
+import {
+  applyCrunchworkJobDates,
+  pickCrunchworkJobStatus,
+} from '../../../jobs/job-outbound.utils';
 import {
   applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
@@ -86,12 +89,54 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       );
       return {};
     }
-    const response = await this.crunchwork.updateJob({
-      connectionId,
-      jobId: externalId,
-      body: this.transformJobPayload(action, payload),
-    });
-    return { responsePayload: response as Record<string, unknown> };
+
+    // CW status changes use POST /jobs/{id}/status (UpdateJobStatusInput), not the
+    // general Update Job body — transformJobPayload intentionally omits status.
+    const status = pickCrunchworkJobStatus(payload);
+
+    if (action === 'status_change') {
+      if (!status) {
+        this.logger.warn(
+          `CrunchworkOutboundAdapter.pushJob — status_change for ${entityId} has no usable CW status`,
+        );
+        return {};
+      }
+      this.logger.debug(
+        `CrunchworkOutboundAdapter.pushJob — status_change ${entityId} → ${status.externalReference}`,
+      );
+      const response = await this.crunchwork.updateJobStatus({
+        connectionId,
+        jobId: externalId,
+        body: { status },
+      });
+      return { responsePayload: response as Record<string, unknown> };
+    }
+
+    const body = this.transformJobPayload(payload);
+    let responsePayload: Record<string, unknown> | undefined;
+
+    if (Object.keys(body).length > 0) {
+      const response = await this.crunchwork.updateJob({
+        connectionId,
+        jobId: externalId,
+        body,
+      });
+      responsePayload = response as Record<string, unknown>;
+    }
+
+    if (status) {
+      this.logger.debug(
+        `CrunchworkOutboundAdapter.pushJob — updating status for ${entityId} → ${status.externalReference}`,
+      );
+      const response = await this.crunchwork.updateJobStatus({
+        connectionId,
+        jobId: externalId,
+        body: { status },
+      });
+      responsePayload = response as Record<string, unknown>;
+    }
+
+    return { responsePayload };
   }
 
   private async pushInvoice(
@@ -124,10 +169,6 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
         const createBody = {
           purchaseOrderId,
           invoiceType: { externalReference: 'Invoice' },
-          ...(typeof payload.externalReference === 'string' &&
-          payload.externalReference.trim()
-            ? { externalReference: payload.externalReference.trim() }
-            : {}),
         };
         try {
           const createResponse = await this.crunchwork.createInvoice({
@@ -192,17 +233,9 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
 
       // CW CreateVendorTaxInvoiceInput is minimal; set Submitted on update
       // (status.externalReference per Insurance REST API §3.3.7).
-      // Top-level externalReference = human invoice number (API only; local DB
-      // column stores the CW UUID).
       const updateBody: Record<string, unknown> = {
         status: { externalReference: 'Submitted' },
       };
-      if (
-        typeof payload.externalReference === 'string' &&
-        payload.externalReference.trim()
-      ) {
-        updateBody.externalReference = payload.externalReference.trim();
-      }
       if (
         typeof payload.vendorInvoiceNumber === 'string' &&
         payload.vendorInvoiceNumber
@@ -867,22 +900,22 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
   }
 
   private transformJobPayload(
-    action: string,
     payload: Record<string, unknown>,
   ): Record<string, unknown> {
-    if (action === 'status_change') {
-      return { status: payload.step ?? payload.status };
-    }
-
     // Strip internal-only keys; flatten type-detail JSON blobs to CW top-level fields.
+    // status / statusLookupId / step are handled by pushJob → updateJobStatus.
     const omit = new Set([
       'externalId',
       'status',
       'statusLookupId',
+      'step',
+      'entity',
       'jobTypeLookupId',
       'assignedToUserId',
       'customData',
       'cwCustomData',
+      // CW expects claimRecommendation under customData (see applyCrunchworkJobDates).
+      'claimRecommendation',
       'temporaryAccommodationDetails',
       'specialistDetails',
       'rectificationDetails',
@@ -914,12 +947,12 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       out[key] = value;
     }
 
-    const withDates = applyCrunchworkJobDates(out, payload);
-    if (withDates.customData !== out.customData) {
+    const withCustom = applyCrunchworkJobDates(out, payload);
+    if (withCustom.customData !== out.customData) {
       this.logger.debug(
-        'CrunchworkOutboundAdapter.transformJobPayload — including job dates in CW customData',
+        'CrunchworkOutboundAdapter.transformJobPayload — including CW customData fields (dates, claimRecommendation)',
       );
     }
-    return withDates;
+    return withCustom;
   }
 }
