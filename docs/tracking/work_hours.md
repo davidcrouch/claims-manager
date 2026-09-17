@@ -1341,7 +1341,7 @@
   Wide tables still scroll with the page so headers remain aligned with the rows beneath them.
   Same sticky-header behaviour applied across appointments, assessments, bills, contacts, documents, journals, messages, proposals, purchase orders, reports, RFQs, vendors, and work orders.
   Outcome: planners can filter the calendar by person, and staff keep their place in long lists without losing column context.
-- `2026-09-17` `PENDING` **1 h**
+- `2026-09-17` `3661bd7` **1 h**
   `12 files | +356 −10 | Tier 3 complex | Moderate orchestration`
   Lay summary: When jobs, quotes, and invoices are sent to the insurer system, the human-readable number goes with them, while the local link ID stays unchanged.
   **Outbound human reference numbers for jobs, quotes, and invoices.**
