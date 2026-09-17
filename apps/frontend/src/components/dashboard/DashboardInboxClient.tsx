@@ -16,7 +16,6 @@ import {
 } from './dashboard-inbox.copy';
 
 const DECISION_KEYS: InboxQueueKey[] = [
-  'workOrdersToAccept',
   'proposalsToReview',
   'rfqsAwaiting',
   'estimatesToPublish',

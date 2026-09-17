@@ -7,7 +7,6 @@ import {
   TasksRepository,
   InboundWebhookEventsRepository,
   LookupsRepository,
-  WorkOrdersRepository,
   RfqsRepository,
   ProposalsRepository,
   NotificationsRepository,
@@ -24,7 +23,6 @@ import {
   ESTIMATE_PUBLISH_STATUS_NAMES,
   PROPOSAL_REVIEW_STATUS_NAMES,
   RFQ_AWAITING_STATUS_NAMES,
-  WO_ACCEPT_STATUS_NAMES,
   daysFromNow,
   formatJobAddressLine,
   humanizeTitle,
@@ -60,7 +58,6 @@ export interface RecentActivityDto {
 }
 
 export type InboxQueueKey =
-  | 'workOrdersToAccept'
   | 'proposalsToReview'
   | 'rfqsAwaiting'
   | 'estimatesToPublish'
@@ -146,7 +143,6 @@ export class DashboardService {
     private readonly tasksRepo: TasksRepository,
     private readonly webhookRepo: InboundWebhookEventsRepository,
     private readonly lookupsRepo: LookupsRepository,
-    private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly rfqsRepo: RfqsRepository,
     private readonly proposalsRepo: ProposalsRepository,
     private readonly notificationsRepo: NotificationsRepository,
@@ -227,14 +223,12 @@ export class DashboardService {
     );
 
     const [
-      woLookups,
       proposalLookups,
       rfqLookups,
       quoteLookups,
       jobStatusLookups,
       assignedClaimIds,
     ] = await Promise.all([
-      this.lookupsRepo.findByDomain({ tenantId, domain: 'work_order_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'proposal_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'rfq_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'quote_status' }),
@@ -259,14 +253,13 @@ export class DashboardService {
     const mineOnly = params.mine === true ? true : params.mine === false ? false : scopedToUser;
     const myJobIds = assignedActiveJobs.data.map((job) => job.id);
     const assigneeFilter = mineOnly && userId ? userId : undefined;
-    /** Job-linked entities (proposals/RFQs) and WO/quote mine via my jobs. */
+    /** Job-linked entities (proposals/RFQs) and quote mine via my jobs. */
     const myJobIdsFilter = mineOnly ? myJobIds : undefined;
     const skipJobLinkedMine = Boolean(mineOnly && myJobIds.length === 0);
     const matchAssigneeOrJobIds = Boolean(
       mineOnly && assigneeFilter && myJobIdsFilter && myJobIdsFilter.length > 0,
     );
 
-    const woStatusIds = matchLookupIdsByNames(woLookups, WO_ACCEPT_STATUS_NAMES);
     const proposalStatusIds = matchLookupIdsByNames(
       proposalLookups,
       PROPOSAL_REVIEW_STATUS_NAMES,
@@ -283,7 +276,6 @@ export class DashboardService {
     const emptyList = { data: [], total: 0 };
 
     const [
-      workOrders,
       proposals,
       rfqs,
       quotes,
@@ -297,17 +289,6 @@ export class DashboardService {
       todayEvents,
       tenantActiveJobs,
     ] = await Promise.all([
-      woStatusIds.length > 0 && !(mineOnly && !assigneeFilter && skipJobLinkedMine)
-        ? this.workOrdersRepo.findAll({
-            tenantId,
-            status: woStatusIds.join(','),
-            assignedToUserId: assigneeFilter,
-            jobIds: mineOnly ? myJobIdsFilter : undefined,
-            matchAssigneeOrJobIds,
-            limit: PREVIEW_LIMIT,
-            sort: 'updated_at_desc',
-          })
-        : emptyList,
       proposalStatusIds.length > 0 && !skipJobLinkedMine
         ? this.proposalsRepo.findAll({
             tenantId,
@@ -390,7 +371,6 @@ export class DashboardService {
     const overdueAndSoon = this.dedupeTasks([...overdueTasks, ...dueSoon]);
 
     const jobIds = new Set<string>();
-    for (const row of workOrders.data) if (row.jobId) jobIds.add(row.jobId);
     for (const row of proposals.data) if (row.jobId) jobIds.add(row.jobId);
     for (const row of rfqs.data) if (row.jobId) jobIds.add(row.jobId);
     for (const row of quotes.data) if (row.jobId) jobIds.add(row.jobId);
@@ -405,25 +385,6 @@ export class DashboardService {
       id ? lookups.find((l) => l.id === id)?.name ?? undefined : undefined;
 
     const queues: DashboardInboxQueue[] = [];
-
-    if (workOrders.total > 0) {
-      queues.push({
-        key: 'workOrdersToAccept',
-        title: 'Work orders to accept',
-        count: workOrders.total,
-        href: statusFilterHref('/work-orders', woStatusIds),
-        items: workOrders.data.map((row) => ({
-          id: row.id,
-          entityType: 'work_order',
-          title: humanizeTitle('Work order', row.internalNumber, row.workOrderNumber, row.name),
-          subtitle: jobSubtitle(jobById.get(row.jobId ?? '')),
-          status: lookupName(woLookups, row.statusLookupId),
-          dueAt: row.startDate ?? null,
-          href: `/work-orders/${row.id}`,
-          jobId: row.jobId,
-        })),
-      });
-    }
 
     if (proposals.total > 0) {
       queues.push({
@@ -577,7 +538,7 @@ export class DashboardService {
 
     const actionRequired = queues
       .filter((q) =>
-        ['workOrdersToAccept', 'proposalsToReview', 'rfqsAwaiting', 'estimatesToPublish', 'overdueTasks'].includes(
+        ['proposalsToReview', 'rfqsAwaiting', 'estimatesToPublish', 'overdueTasks'].includes(
           q.key,
         ),
       )

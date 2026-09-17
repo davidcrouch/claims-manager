@@ -116,11 +116,6 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   const jobNameById =
     wo.jobId && jobName ? { [wo.jobId]: jobName } : undefined;
 
-  const WO_ACCEPT_STATUSES = ['Received', 'Issued', 'Draft', 'Open'];
-  const canAcceptDecline = WO_ACCEPT_STATUSES.some(
-    (s) => s.toLowerCase() === status.toLowerCase(),
-  );
-
   async function handleStatusChange(newStatus: string) {
     setLoading(true);
     const result = await updateWorkOrderStatusAction(wo.id, newStatus);
@@ -134,27 +129,6 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   return (
     <>
       <SetHeaderActions>
-        {canAcceptDecline && (
-          <>
-            <Button
-              size="default"
-              disabled={loading}
-              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-              onClick={() => handleStatusChange('Accepted')}
-            >
-              Accept
-            </Button>
-            <Button
-              size="default"
-              variant="destructive"
-              disabled={loading}
-              className="h-9 gap-1.5 px-4"
-              onClick={() => handleStatusChange('Rejected')}
-            >
-              Decline
-            </Button>
-          </>
-        )}
         {status === 'Accepted' && (
           <Button
             size="default"

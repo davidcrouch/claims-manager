@@ -10,7 +10,6 @@ export const INACTIVE_JOB_STATUS_NAMES = [
   'declined',
 ];
 
-export const WO_ACCEPT_STATUS_NAMES = ['Received', 'Issued', 'Draft', 'Open'];
 export const PROPOSAL_REVIEW_STATUS_NAMES = ['Received', 'Under Review'];
 export const RFQ_AWAITING_STATUS_NAMES = ['Sent'];
 export const ESTIMATE_PUBLISH_STATUS_NAMES = ['Approved'];

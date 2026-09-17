@@ -916,7 +916,6 @@ export interface UpdateConnectionPayload {
 }
 
 export type InboxQueueKey =
-  | 'workOrdersToAccept'
   | 'proposalsToReview'
   | 'rfqsAwaiting'
   | 'estimatesToPublish'
